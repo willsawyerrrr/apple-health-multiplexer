@@ -99,6 +99,14 @@ final class CoreThermometerClient: NSObject, ThermometerClient {
         peripheral.readValue(for: clock)
     }
 
+    private func publish(_ update: ReadingAttributor.Update, _ peripheral: CBPeripheral) {
+        for reading in update.readings { continuation.yield(.reading(reading)) }
+        for measurement in update.needsCurrentProfile {
+            liveQueue.append(measurement)
+            if let profile = characteristics[profileUUID] { peripheral.readValue(for: profile) }
+        }
+    }
+
     private func pollQueue(_ peripheral: CBPeripheral) {
         guard let queue = characteristics[queueUUID] else { return }
         peripheral.readValue(for: queue)
@@ -201,22 +209,19 @@ extension CoreThermometerClient: CBPeripheralDelegate {
             if case .record(let record) = read {
                 log("record ts=\(record.timestamp) idx=\(record.index) profile=\(record.profile)")
             }
-            if polling, attributor.observe(read) {
+            guard polling else { return }
+            let (keepPolling, update) = attributor.observe(read)
+            publish(update, peripheral)
+            if keepPolling {
                 pollQueue(peripheral)
-            } else if polling {
+            } else {
                 polling = false
                 log("queue empty")
             }
         case temperatureUUID:
             guard let measurement = TemperatureMeasurement(data) else { return log("bad indication \(data.hex)") }
             log("indication \(String(format: "%.1f", measurement.celsius)) ts=\(measurement.timestamp)")
-            switch attributor.receive(measurement, at: now().timeIntervalSince1970) {
-            case .resolved(let reading):
-                if let reading { continuation.yield(.reading(reading)) }
-            case .needsCurrentProfile:
-                liveQueue.append(measurement)
-                if let profile = characteristics[profileUUID] { peripheral.readValue(for: profile) }
-            }
+            publish(attributor.receive(measurement, at: now().timeIntervalSince1970), peripheral)
         case profileUUID:
             guard data.count == 2, !liveQueue.isEmpty else { return log("bad profile \(data.hex)") }
             let measurement = liveQueue.removeFirst()

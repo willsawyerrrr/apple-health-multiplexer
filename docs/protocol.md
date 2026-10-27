@@ -74,11 +74,18 @@ pop characteristic would also delete the 2A1C readings.
 2. Start the continuous 2A75 poll loop.
 3. Subscribe (indicate) to 2A1C. The subscription stays for the whole
    connection.
-4. For each indication, parse temperature and timestamp, then look up its
-   profile in the polled records by timestamp.
-5. If no record was seen and no other indication arrived within the previous
-   1 s (a lone live reading), read 2A78 immediately and use that profile.
-   Otherwise the profile is `nil`: ambiguous, skipped downstream.
+4. For each indication, parse temperature and timestamp and hold it until a
+   polled record with an equal timestamp arrives (the poll trails the
+   indications, so the record usually arrives after its indication), then
+   finalise it with that record's profile. Profile 0 is a real profile; only
+   `nil` is ambiguous. Late or duplicate records for a finalised reading are
+   ignored.
+5. When polling finishes (three consecutive empty reads), finalise every
+   indication still unmatched. If it was the only indication in its burst (no
+   other indication within 1 s), read 2A78 immediately and use that profile (a
+   live single reading). Otherwise the profile is `nil`: ambiguous, skipped
+   downstream. After polling has finished, a live indication with no record is
+   finalised on arrival the same way.
 6. `measuredAt = Date(unix: thermometerTimestamp + clockOffset)`.
 7. Drop anything outside 32.0-43.0 °C (non-body readings of 22-27 °C appear).
 8. Deduplicate on (profile, `measuredAt` to the second, °C).

@@ -12,12 +12,14 @@ CoreThermometerClient (CoreBluetooth) ──events──▶ ReadingsModel ──
   Celsius) into degrees and a thermometer-clock Unix timestamp.
 - `QueueRead` parses a 2A75 value into `.empty` or a `ThermometerRecord`.
 - `ReadingAttributor` holds the per-connection state: clock offset, the
-  timestamp-to-profile map built from polled records, the empty-read streak that
-  ends polling, batch detection, and the cross-connection dedupe set. It takes
-  every input (including times) as arguments, so it is deterministic. It
-  returns `.resolved(reading?)` or `.needsCurrentProfile` for a lone live
-  indication, which the client completes with `completeLive(_:profile:)` after
-  reading 2A78.
+  timestamp-to-profile map built from polled records, the indications waiting
+  for their record, the empty-read streak that ends polling, and the
+  cross-connection dedupe set. It takes every input (including times) as
+  arguments, so it is deterministic. `receive` and `observe` return an `Update`
+  of finalised readings plus lone live indications (`needsCurrentProfile`),
+  which the client completes with `completeLive(_:profile:)` after reading
+  2A78. An indication is finalised when its record is polled, or when polling
+  finishes.
 - `ThermometerClient` is the protocol the UI depends on: `start()` and an
   `events` stream of `ThermometerEvent` (`state`, `reading`, `log`).
 - `CoreThermometerClient` implements it. It restores state under a fixed

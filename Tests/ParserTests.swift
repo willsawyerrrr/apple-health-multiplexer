@@ -56,3 +56,11 @@ struct ParserTests {
         #expect(data.uint16BE(at: 4) == 7)
     }
 }
+
+struct ReadingTests {
+    @Test func profileZeroIsNotAmbiguous() {
+        let reading = ThermometerReading(profile: 0, celsius: 36.1, measuredAt: .now)
+        #expect(!reading.isAmbiguous)
+        #expect(ThermometerReading(profile: nil, celsius: 36.1, measuredAt: .now).isAmbiguous)
+    }
+}
