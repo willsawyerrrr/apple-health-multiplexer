@@ -218,6 +218,17 @@ struct ReadingAttributorTests {
         #expect(!h.keepPolling)
     }
 
+    @Test func finishingPollingEarlyFinalisesPendingIndications() {
+        var h = Harness(offset: offset)
+        h.indicate(100, 36.0, at: 1000)
+        h.indicate(99, 36.1, at: 1000.15)
+        h.indicate(50, 36.2, at: 1010)
+        h.poll(record(ts: 100, profile: 1))
+        h.apply(h.attributor.finishPolling())
+        #expect(h.readings.map(\.profile) == [1, nil])
+        #expect(h.live == [TemperatureMeasurement(celsius: 36.2, timestamp: 50)])
+    }
+
     @Test func newSessionDiscardsRecords() {
         var h = Harness(offset: offset)
         h.poll(record(ts: 100, profile: 1))

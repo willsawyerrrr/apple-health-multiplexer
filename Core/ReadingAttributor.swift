@@ -66,10 +66,20 @@ struct ReadingAttributor {
             update.readings = matched.compactMap { finish($0.measurement, profile: profile) }
         }
         guard emptyStreak >= Self.emptyReadsToStop else { return (true, update) }
+        let finished = finishPolling()
+        update.readings += finished.readings
+        update.needsCurrentProfile += finished.needsCurrentProfile
+        return (false, update)
+    }
+
+    /// Ends polling early, as for a malformed 2A75 value, and finalises every
+    /// indication still unmatched.
+    mutating func finishPolling() -> Update {
+        var update = Update()
         pollFinished = true
         for entry in pending { settle(entry, into: &update) }
         pending = []
-        return (false, update)
+        return update
     }
 
     /// Handles an indication received at host time `now` (Unix seconds). It is

@@ -203,8 +203,10 @@ extension CoreThermometerClient: CBPeripheralDelegate {
             }
         case queueUUID:
             guard let read = QueueRead(data) else {
+                log("bad record \(data.hex)")
+                guard polling else { return }
                 polling = false
-                return log("bad record \(data.hex)")
+                return publish(attributor.finishPolling(), peripheral)
             }
             if case .record(let record) = read {
                 log("record ts=\(record.timestamp) idx=\(record.index) profile=\(record.profile)")

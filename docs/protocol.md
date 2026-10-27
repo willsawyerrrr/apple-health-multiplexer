@@ -80,7 +80,8 @@ pop characteristic would also delete the 2A1C readings.
    finalise it with that record's profile. Profile 0 is a real profile; only
    `nil` is ambiguous. Late or duplicate records for a finalised reading are
    ignored.
-5. When polling finishes (three consecutive empty reads), finalise every
+5. When polling finishes (three consecutive empty reads, or a malformed 2A75
+   value, which is logged and ends polling), finalise every
    indication still unmatched. If it was the only indication in its burst (no
    other indication within 1 s), read 2A78 immediately and use that profile (a
    live single reading). Otherwise the profile is `nil`: ambiguous, skipped

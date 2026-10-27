@@ -19,7 +19,7 @@ CoreThermometerClient (CoreBluetooth) ──events──▶ ReadingsModel ──
   of finalised readings plus lone live indications (`needsCurrentProfile`),
   which the client completes with `completeLive(_:profile:)` after reading
   2A78. An indication is finalised when its record is polled, or when polling
-  finishes.
+  finishes (three empty reads, or a malformed 2A75 value via `finishPolling()`).
 - `ThermometerClient` is the protocol the UI depends on: `start()` and an
   `events` stream of `ThermometerEvent` (`state`, `reading`, `log`).
 - `CoreThermometerClient` implements it. It restores state under a fixed
