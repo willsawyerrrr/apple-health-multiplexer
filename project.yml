@@ -1,0 +1,54 @@
+name: AppleHealthMultiplexer
+options:
+  bundleIdPrefix: dev.willsawyerrrr
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
+targets:
+  AppleHealthMultiplexer:
+    type: application
+    platform: iOS
+    sources: [App, Core]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Apple Health Multiplexer
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSBluetoothAlwaysUsageDescription: Apple Health Multiplexer connects to your ThermoCare thermometer to read its measurements.
+        UIBackgroundModes: [bluetooth-central]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.willsawyerrrr.apple-health-multiplexer
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+  AppleHealthMultiplexerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: AppleHealthMultiplexer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.willsawyerrrr.apple-health-multiplexer.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  AppleHealthMultiplexer:
+    build:
+      targets:
+        AppleHealthMultiplexer: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [AppleHealthMultiplexerTests]

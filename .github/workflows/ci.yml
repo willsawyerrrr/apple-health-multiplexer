@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+      - uses: pre-commit/action@v3.0.1
+
+  ios:
+    runs-on: macos-26
+    env:
+      DEVELOPMENT_TEAM: ""
+    steps:
+      - uses: actions/checkout@v7
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.6"
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Test
+        run: >
+          xcodebuild test
+          -scheme AppleHealthMultiplexer
+          -destination 'platform=iOS Simulator,name=iPhone 17'
+          CODE_SIGNING_ALLOWED=NO
+
+  ci-status:
+    name: CI Status
+    if: always()
+    needs: [pre-commit, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
