@@ -38,6 +38,15 @@ HealthKit and CloudKit are out of scope for the Bluetooth layer.
   `CI Status` job `needs` every other job; add new jobs to it. `main`'s
   ruleset requires only `CI Status`.
 
+## Deployment
+
+`.github/workflows/deploy-ios.yml` calls the platform repo's `ios-testflight`
+workflow on pushes to `main` touching `App/`, `Core/` or `project.yml`, and on
+demand (`gh workflow run "Deploy iOS"`). It needs the `OP_SERVICE_ACCOUNT_TOKEN`
+secret and the `OP_ENVIRONMENT_IDS` variable (`b5zkkwxuutlttwbrv5xhgojye4`, the
+Apple Development Environment). The marketing version must match
+`project.yml`'s `MARKETING_VERSION` (`0.1.0`).
+
 ## Conventions
 
 Standard [willsawyerrrr.dev conventions](../../CLAUDE.md) apply.

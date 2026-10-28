@@ -1,0 +1,20 @@
+name: Deploy iOS
+
+on:
+  push:
+    branches: [main]
+    paths: [App/**, Core/**, project.yml]
+  workflow_dispatch:
+
+concurrency: deploy-ios
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    uses: willsawyerrrr/platform/.github/workflows/ios-testflight.yml@main
+    with:
+      project-dir: .
+      scheme: Kintemp
+    secrets: inherit
