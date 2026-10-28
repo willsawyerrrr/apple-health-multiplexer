@@ -31,8 +31,10 @@ CoreThermometerClient (CoreBluetooth) ──events──▶ ReadingsModel ──
 ## App
 
 - `ReadingsModel` (`@Observable`) consumes the client's events: connection
-  state, readings (newest first) and a bounded debug log.
-- `ReadingsView` lists readings (profile or ambiguous, °C, time), the
+  state, readings (newest first) and a bounded debug log. `delete(_:)` removes
+  a reading from the list only; `ReadingAttributor`'s dedupe set keeps a
+  re-delivered reading from reappearing.
+- `ReadingsView` lists readings (profile or ambiguous, °C, time; swipe to delete), the
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
   `bluetooth-central` background mode and `ITSAppUsesNonExemptEncryption`
