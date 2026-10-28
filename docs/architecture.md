@@ -3,7 +3,7 @@
 ```
 CoreThermometerClient (CoreBluetooth) ──events──▶ ReadingsModel ──▶ ReadingsView
         │
-        └── ReadingAttributor, TemperatureMeasurement, QueueRead (pure)
+        └── ReadingAttributor, TemperatureMeasurement, QueueRead, Profile, ProfileDirectory (pure)
 
 ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local outbox)
                                         └──▶ HouseholdSync (CloudKit)
@@ -30,6 +30,14 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   only until it has found it, and otherwise keeps a pending `connect`. On every
   connection it discovers services `1809` and `1805`, reads the clock, starts
   the 2A75 poll loop, and subscribes to 2A1C. It is read-only.
+- `Profile` is a thermometer slot's record: slot, display name, optional owner
+  and ignored flag. Slot 0 is the guest slot. `isTracked` is false for the guest
+  slot and ignored profiles: their readings are shown on the phone that read
+  them but must never be uploaded or written to Health.
+- `ProfileDirectory` holds profiles by slot, resolves display names (default
+  `Guest` or `Profile N`; a blank rename restores it) and persists every change
+  through a `ProfileStore`. `UserDefaultsProfileStore` is the local store; a
+  CloudKit-backed store can implement the protocol.
 
 - `SyncReading` is an attributed reading with a deterministic record name
   (`reading-<profile>-<whole-second timestamp>-<tenths of a degree>`), so every
@@ -43,7 +51,8 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   database's zone when this phone is a member, else a zone it owns in the
   private database, created on demand. A `serverRecordChanged` save counts as
   success. The change token is persisted; an expired token restarts the fetch.
-- `ReadingSyncCoordinator` persists each attributed reading on receipt, uploads
+- `ReadingSyncCoordinator` persists each attributed reading of a tracked profile on receipt (guest and
+  ignored profiles' readings stay off the store and CloudKit), uploads
   the outbox oldest first (stopping at the first failure), and merges fetched
   household readings into the store.
 
@@ -55,7 +64,9 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   re-delivered reading from reappearing.
   It records each reading with the coordinator and runs `syncHousehold()`
   (flush, then pull) whenever the app becomes active.
-- `ReadingsView` lists readings (profile or ambiguous, °C, time; swipe to delete), the
+- `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI.
+  `ProfilesView` renames profiles (guest slot, stored and observed slots).
+- `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete), the
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
   `bluetooth-central` and `remote-notification` background modes and

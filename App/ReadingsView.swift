@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ReadingsView: View {
     let model: ReadingsModel
+    let profiles: ProfileBook
+    @State private var showsProfiles = false
 
     var body: some View {
         NavigationStack {
@@ -12,7 +14,7 @@ struct ReadingsView: View {
                         Text("No readings yet").foregroundStyle(.secondary)
                     }
                     ForEach(model.readings) { reading in
-                        ReadingRow(reading: reading)
+                        ReadingRow(reading: reading, profileName: profiles.displayName(slot: reading.profile))
                     }
                     .onDelete { offsets in
                         for reading in offsets.map({ model.readings[$0] }) { model.delete(reading) }
@@ -27,12 +29,17 @@ struct ReadingsView: View {
                 }
             }
             .navigationTitle("Thermometer")
+            .toolbar { Button("Profiles", systemImage: "person.2") { showsProfiles = true } }
+            .sheet(isPresented: $showsProfiles) {
+                ProfilesView(book: profiles, observedSlots: model.readings.compactMap(\.profile))
+            }
         }
     }
 }
 
 private struct ReadingRow: View {
     let reading: ThermometerReading
+    let profileName: String
 
     var body: some View {
         HStack {
@@ -42,8 +49,8 @@ private struct ReadingRow: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            if let profile = reading.profile {
-                Text("Profile \(profile)")
+            if reading.profile != nil {
+                Text(profileName)
             } else {
                 Label("Ambiguous", systemImage: "questionmark.circle").foregroundStyle(.orange)
             }
