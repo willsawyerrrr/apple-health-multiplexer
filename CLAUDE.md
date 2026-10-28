@@ -33,9 +33,11 @@ household sharing lives in `Core/` behind `HouseholdSync`.
 ## Commands
 
 - Tests: `DEVELOPMENT_TEAM= xcodegen generate`, then
-  `xcodebuild test -scheme Kintemp -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO`.
+  `xcodebuild test -scheme Kintemp -destination 'id=<simulator-udid>' CODE_SIGNING_ALLOWED=NO`
+  (`xcrun simctl list devices available`; names can repeat, so use the UDID).
 - CI (`.github/workflows/ci.yml`) runs `pre-commit` and `ios` on `macos-26`
-  with Xcode 26.6 (also in `.xcode-version`; bump together). The aggregate
+  with Xcode 26.6 (also in `.xcode-version`; bump together). `ios` picks an
+  available iPhone simulator by UDID, creating one if none exists. The aggregate
   `CI Status` job `needs` every other job; add new jobs to it. `main`'s
   ruleset requires only `CI Status`.
 
