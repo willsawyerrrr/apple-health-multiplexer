@@ -107,6 +107,7 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
   `bluetooth-central` and `remote-notification` background modes,
+  `NSHealthShareUsageDescription` (App Store Connect requires it with the HealthKit entitlement),
   `NSHealthUpdateUsageDescription`, `CKSharingSupported` as `true` and
   `ITSAppUsesNonExemptEncryption` as `false`. The app's entitlements enable HealthKit and declare the
   `iCloud.dev.willsawyerrrr.kintemp` CloudKit container.
