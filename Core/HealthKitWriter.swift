@@ -4,6 +4,15 @@ import HealthKit
 struct HealthKitWriter: HealthWriter {
     private let store = HKHealthStore()
     private let type = HKQuantityType(.bodyTemperature)
+    private let device = HKDevice(
+        name: "THERMOCARE Smart Thermometer",
+        manufacturer: "T&R Biofab",
+        model: "MT-3000",
+        hardwareVersion: "V1.7",
+        firmwareVersion: "V2.0T",
+        softwareVersion: "V1.0",
+        localIdentifier: nil,
+        udiDeviceIdentifier: nil)
 
     func writeStatus() -> HealthWriteStatus {
         switch store.authorizationStatus(for: type) {
@@ -26,6 +35,7 @@ struct HealthKitWriter: HealthWriter {
             quantity: quantity,
             start: sample.measuredAt,
             end: sample.measuredAt,
+            device: device,
             metadata: [
                 HKMetadataKeySyncIdentifier: sample.name,
                 HKMetadataKeySyncVersion: 1,
