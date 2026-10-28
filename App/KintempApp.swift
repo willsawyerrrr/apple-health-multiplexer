@@ -5,9 +5,11 @@ struct KintempApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var model = ReadingsModel(client: CoreThermometerClient(), sync: Self.makeSync())
 
+    @State private var profiles = ProfileBook()
+
     var body: some Scene {
         WindowGroup {
-            ReadingsView(model: model)
+            ReadingsView(model: model, profiles: profiles)
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     if phase == .active { Task { await model.syncHousehold() } }
                 }
