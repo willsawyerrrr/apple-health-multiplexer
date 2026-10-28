@@ -4,7 +4,8 @@
 
 An iOS app (SwiftUI, XcodeGen) that connects to a ThermoCare Bluetooth
 thermometer and emits temperature readings attributed to a thermometer profile.
-HealthKit and CloudKit are out of scope for the Bluetooth layer.
+HealthKit and CloudKit are out of scope for the Bluetooth layer; CloudKit
+household sharing lives in `Core/` behind `HouseholdSync`.
 
 ## Layout
 
