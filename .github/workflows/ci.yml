@@ -37,15 +37,15 @@ jobs:
             [.devices | to_entries[] | select(.key | contains("iOS"))
              | .value[] | select(.name | startswith("iPhone"))][0].udid // empty')
           if [ -z "$udid" ]; then
-            runtime=$(xcrun simctl list runtimes available -j | jq -r '
-              [.runtimes[] | select(.platform == "iOS")][-1].identifier // empty')
+            runtime=$(xcrun simctl list runtimes available -j | jq -c '
+              [.runtimes[] | select(.platform == "iOS")][-1] // empty')
             if [ -z "$runtime" ]; then
               echo "::error::No iOS simulator runtime is installed"
               exit 1
             fi
-            devicetype=$(xcrun simctl list devicetypes -j | jq -r '
-              [.devicetypes[] | select(.name | startswith("iPhone"))][-1].identifier')
-            udid=$(xcrun simctl create Kintemp-CI "$devicetype" "$runtime")
+            devicetype=$(jq -r '
+              [.supportedDeviceTypes[] | select(.name | startswith("iPhone"))][-1].identifier' <<< "$runtime")
+            udid=$(xcrun simctl create Kintemp-CI "$devicetype" "$(jq -r .identifier <<< "$runtime")")
           fi
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
       - name: Test
