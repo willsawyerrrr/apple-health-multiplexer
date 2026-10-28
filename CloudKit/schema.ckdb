@@ -9,10 +9,7 @@ DEFINE SCHEMA
         "___recordID"   REFERENCE,
         celsius         DOUBLE,
         measuredAt      TIMESTAMP,
-        profile         INT64,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_world"
+        profile         INT64
     );
 
     RECORD TYPE Users (
