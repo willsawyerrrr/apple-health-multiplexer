@@ -90,6 +90,10 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   access, so only write access is reported). `HealthKitWriter` saves an `HKQuantitySample`
   (`bodyTemperature`, °C, start and end at the measurement time) with the
   reading's `SyncReading.recordName` as `HKMetadataKeySyncIdentifier` and `HKMetadataKeySyncVersion` 1.
+  Each sample carries a fixed `HKDevice` (THERMOCARE Smart Thermometer, T&R
+  Biofab, MT-3000, hardware V1.7, firmware V2.0T, software V1.0), the same
+  details the first-party app records, so Health shows the thermometer under
+  Device Details even when another household phone wrote the sample.
 - `HealthSync` holds `myProfile` (0, 1 or 2; local, in `UserDefaults`, not
   synced) and a pending queue persisted in `UserDefaults`. `submit` queues only
   readings for `myProfile` when that profile is tracked, deduplicated by name.
