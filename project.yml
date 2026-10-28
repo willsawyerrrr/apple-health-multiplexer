@@ -29,6 +29,7 @@ targets:
         UIBackgroundModes: [bluetooth-central, remote-notification]
         NSHealthUpdateUsageDescription: Kintemp saves your thermometer readings to Apple Health as body temperature.
         ITSAppUsesNonExemptEncryption: false
+        CKSharingSupported: true
     entitlements:
       path: App/Kintemp.entitlements
       properties:
