@@ -51,7 +51,8 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   database's zone when this phone is a member, else a zone it owns in the
   private database, created on demand. A `serverRecordChanged` save counts as
   success. The change token is persisted; an expired token restarts the fetch.
-- `ReadingSyncCoordinator` persists each attributed reading on receipt, uploads
+- `ReadingSyncCoordinator` persists each attributed reading of a tracked profile on receipt (guest and
+  ignored profiles' readings stay off the store and CloudKit), uploads
   the outbox oldest first (stopping at the first failure), and merges fetched
   household readings into the store.
 

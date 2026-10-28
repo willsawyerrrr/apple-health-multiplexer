@@ -113,6 +113,14 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at seconds: Time
         #expect(remote.uploaded.isEmpty)
     }
 
+    @Test func neverUploadsUntrackedProfiles() async {
+        let c = ReadingSyncCoordinator(store: store, sync: remote, isTracked: { $0 != 2 })
+        c.record(reading(2))
+        #expect(await c.flush())
+        #expect(store.all.isEmpty)
+        #expect(remote.uploaded.isEmpty)
+    }
+
     @Test func persistsOnReceiptAndUploadsOnFlush() async {
         let c = coordinator
         c.record(reading(1))

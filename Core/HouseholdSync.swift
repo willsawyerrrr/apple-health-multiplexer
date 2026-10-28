@@ -13,19 +13,22 @@ protocol HouseholdSync: AnyObject {
 final class ReadingSyncCoordinator {
     private let store: ReadingStore
     private let sync: HouseholdSync
+    private let isTracked: (Int) -> Bool
     private var isFlushing = false
 
-    init(store: ReadingStore, sync: HouseholdSync) {
+    /// `isTracked` says whether a profile slot's readings may be persisted and shared.
+    init(store: ReadingStore, sync: HouseholdSync, isTracked: @escaping (Int) -> Bool = { _ in true }) {
         self.store = store
         self.sync = sync
+        self.isTracked = isTracked
     }
 
     /// Readings persisted on this phone, including those fetched from the household.
     var storedReadings: [ThermometerReading] { store.all.map(\.reading) }
 
-    /// Persists a reading for upload; unattributed readings are dropped.
+    /// Persists a reading for upload; unattributed readings and those of untracked profiles are dropped.
     func record(_ reading: ThermometerReading) {
-        guard let reading = SyncReading(reading) else { return }
+        guard let reading = SyncReading(reading), isTracked(reading.profile) else { return }
         store.add(reading, uploaded: false)
     }
 
