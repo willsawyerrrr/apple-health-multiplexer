@@ -18,6 +18,9 @@ struct Profile: Codable, Equatable, Identifiable {
 
     static let guestSlot = 0
 
+    /// The slots the thermometer provides.
+    static let thermometerSlots = 0...2
+
     init(slot: Int, name: String? = nil, owner: String? = nil, isIgnored: Bool = false) {
         self.slot = slot
         self.name = name ?? Self.defaultName(slot: slot)

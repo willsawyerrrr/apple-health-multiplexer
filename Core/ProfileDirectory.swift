@@ -39,9 +39,9 @@ struct ProfileDirectory {
         slot.map { profile(slot: $0).name } ?? "Ambiguous"
     }
 
-    /// Slots to list: the guest slot, stored profiles and `observed` slots, ascending.
+    /// Slots to list: the thermometer's slots, stored profiles and `observed` slots, ascending.
     func slots(observed: some Sequence<Int> = []) -> [Int] {
-        Set(bySlot.keys).union(observed).union([Profile.guestSlot]).sorted()
+        Set(bySlot.keys).union(observed).union(Profile.thermometerSlots).sorted()
     }
 
     /// Renames `slot`; a blank name restores the default.
