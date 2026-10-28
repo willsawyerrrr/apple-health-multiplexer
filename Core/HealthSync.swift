@@ -33,8 +33,9 @@ final class HealthSync {
 
     /// Queues the reading when it belongs to `myProfile` and that profile is tracked, then tries to write it.
     func submit(_ reading: ThermometerReading) {
-        guard let profile = reading.profile, profile == myProfile, isTracked(profile) else { return }
-        let name = HealthRecordName.make(profile: profile, measuredAt: reading.measuredAt, celsius: reading.celsius)
+        guard let profile = reading.profile, profile == myProfile, isTracked(profile),
+            let name = SyncReading(reading)?.recordName
+        else { return }
         guard !pending.contains(where: { $0.name == name }) else { return }
         pending.append(HealthSample(name: name, celsius: reading.celsius, measuredAt: reading.measuredAt))
         persist()

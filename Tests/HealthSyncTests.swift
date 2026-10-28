@@ -26,25 +26,13 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at ts: TimeInter
     ThermometerReading(profile: profile, celsius: celsius, measuredAt: Date(timeIntervalSince1970: ts))
 }
 
-@Suite struct HealthRecordNameTests {
-    @Test func combinesProfileTimestampAndTenths() {
-        let date = Date(timeIntervalSince1970: 1_793_119_737.4)
-        #expect(HealthRecordName.make(profile: 2, measuredAt: date, celsius: 36.4) == "2-1793119737-364")
-    }
-
-    @Test func roundsFloatingPointNoiseToTenths() {
-        let date = Date(timeIntervalSince1970: 100)
-        #expect(HealthRecordName.make(profile: 0, measuredAt: date, celsius: 35.6) == "0-100-356")
-    }
-}
-
 @MainActor @Suite struct HealthSyncTests {
     @Test func queuesOnlyMyProfile() {
         let (sync, _) = makeSync(FakeWriter(), profile: 1)
         sync.submit(reading(0))
         sync.submit(reading(nil))
         sync.submit(reading(1))
-        #expect(sync.pending.map(\.name) == ["1-1793119737-364"])
+        #expect(sync.pending.map(\.name) == ["reading-1-1793119737-364"])
     }
 
     @Test func queuesNothingForUntrackedProfile() {
@@ -53,6 +41,15 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at ts: TimeInter
         sync.myProfile = 1
         sync.submit(reading(1))
         #expect(sync.pending.isEmpty)
+    }
+
+    @Test func namesAReadingSeenViaBluetoothAndCloudKitIdentically() {
+        let (sync, _) = makeSync(FakeWriter(), profile: 1)
+        let bluetooth = reading(1, 36.4, at: 1_793_119_737.4)
+        let cloudKit = SyncReading(reading(1, 36.4, at: 1_793_119_737.9))!.reading
+        sync.submit(bluetooth)
+        sync.submit(cloudKit)
+        #expect(sync.pending.count == 1)
     }
 
     @Test func queuesNothingWithoutProfile() {
