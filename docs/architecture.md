@@ -62,6 +62,13 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   and outbox and records its record name as deleted, so it is never uploaded,
   stored or shown again.
 - `CloudKitSchemaBootstrap` (Debug only) runs `prepareShare` at launch when given `-BootstrapCloudKitSchema`, then exits.
+- `HouseholdSubscriptions.ensure` gives the private and shared databases one
+  `CKDatabaseSubscription` each (`household-private`, `household-shared`),
+  skipping a database whose subscription already exists, so launching repeatedly
+  is idempotent; one database failing does not stop the other.
+  `CloudKitSubscriptionDatabase` makes them silent
+  (`shouldSendContentAvailable`, no alert, sound or badge).
+  `KintempApp` calls `CloudKitHouseholdSync.ensureSubscriptions()` at launch.
 - `HouseholdSharing` creates the household share and accepts an incoming one.
   `CloudKitHouseholdSharing` uses a zone-wide `CKShare` on the `Household` zone
   (read-write participants, `publicPermission` none, so private by default). It
@@ -106,6 +113,13 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   CloudKit, and after relaunch.
   It passes each reading to `HealthSync`, records it with the coordinator and
   runs `syncHousehold()` (flush, then pull) whenever the app becomes active.
+- `AppDelegate` calls `registerForRemoteNotifications()` at launch. On a
+  `CKDatabaseNotification` silent push, `didReceiveRemoteNotification` runs
+  `RemoteChanges`, which `KintempApp` sets at launch (so a background launch can
+  answer it) to `model.syncHousehold()`. That flushes, pulls with the change
+  token, feeds new readings to the model and `HealthSync`, and returns a
+  `SyncOutcome` (`newData`, `noData`, `failed`) that becomes the
+  `UIBackgroundFetchResult`.
 - `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI.
   `ProfilesView` lists and renames profiles for every thermometer slot (0, 1, 2), stored profiles and observed slots.
 - `ReadingsView`'s "Invite household" toolbar button calls `invite()` (a
@@ -123,7 +137,9 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   `bluetooth-central` and `remote-notification` background modes,
   `NSHealthShareUsageDescription` (App Store Connect requires it with the HealthKit entitlement),
   `NSHealthUpdateUsageDescription`, `CKSharingSupported` as `true` and
-  `ITSAppUsesNonExemptEncryption` as `false`. The app's entitlements enable HealthKit and declare the
+  `ITSAppUsesNonExemptEncryption` as `false`. The app's entitlements enable HealthKit, set `aps-environment` to
+  `development` (distribution signing replaces it with `production`; the App ID
+  needs the Push Notifications capability) and declare the
   `iCloud.dev.willsawyerrrr.kintemp` CloudKit container.
 
 ## CloudKit schema

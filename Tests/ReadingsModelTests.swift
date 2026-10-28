@@ -83,6 +83,24 @@ struct ReadingsModelTests {
         #expect(model.readings.isEmpty)
     }
 
+    @Test func syncHouseholdReportsWhatThePullFound() async {
+        let remote = StubSync()
+        let model = makeModel(sync: makeCoordinator(remote: remote))
+        #expect(await model.syncHousehold() == .noData)
+
+        remote.changes = [SyncReading(reading(36.1, at: 100))!]
+        #expect(await model.syncHousehold() == .newData)
+        #expect(model.readings.count == 1)
+        #expect(await model.syncHousehold() == .noData)
+    }
+
+    @Test func syncHouseholdReportsFailure() async {
+        let remote = FakeHouseholdSync()
+        remote.failing = true
+        let model = makeModel(sync: ReadingSyncCoordinator(store: InMemoryReadingStore(), sync: remote))
+        #expect(await model.syncHousehold() == .failed)
+    }
+
     @Test func deletedReadingStaysDeletedAfterRelaunch() {
         let store = InMemoryReadingStore()
         let first = makeModel(sync: makeCoordinator(store: store))
