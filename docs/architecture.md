@@ -47,7 +47,8 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   one Health sample. Unattributed readings have
   no `SyncReading` and are never uploaded.
 - `ReadingStore` is durable local storage with an outbox of readings not yet
-  uploaded; `FileReadingStore` keeps it in a JSON file written atomically.
+  uploaded; `FileReadingStore` keeps it in a JSON file written atomically,
+  along with the record names deleted on this phone; `add` refuses those names.
 - `HouseholdSync` uploads a reading (a duplicate succeeds) and fetches changes
   since the previous fetch. `CloudKitHouseholdSync` stores `Reading` records
   (`profile`, `celsius`, `measuredAt`) in a `Household` zone: the shared
@@ -57,7 +58,9 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
 - `ReadingSyncCoordinator` persists each attributed reading of a tracked profile on receipt (guest and
   ignored profiles' readings stay off the store and CloudKit), uploads
   the outbox oldest first (stopping at the first failure), and merges fetched
-  household readings into the store.
+  household readings into the store. `delete` removes a reading from the store
+  and outbox and records its record name as deleted, so it is never uploaded,
+  stored or shown again.
 - `HealthWriter` writes a `HealthSample` idempotently and requests write-only
   body temperature access. `HealthKitWriter` saves an `HKQuantitySample`
   (`bodyTemperature`, °C, start and end at the measurement time) with the
@@ -73,8 +76,11 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
 
 - `ReadingsModel` (`@Observable`) consumes the client's events: connection
   state, readings (newest first) and a bounded debug log. `delete(_:)` removes
-  a reading from the list only; `ReadingAttributor`'s dedupe set keeps a
-  re-delivered reading from reappearing.
+  a reading from the list and the store, and drops its unwritten Health sample.
+  Deletion is local to this phone: the CloudKit record stays (the household's
+  copy is unchanged) and a sample already written to Health stays there.
+  Readings deleted here are ignored when they arrive again over Bluetooth or
+  CloudKit, and after relaunch.
   It passes each reading to `HealthSync`, records it with the coordinator and
   runs `syncHousehold()` (flush, then pull) whenever the app becomes active.
 - `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI.

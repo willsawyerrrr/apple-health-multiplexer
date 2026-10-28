@@ -24,9 +24,12 @@ final class ReadingsModel {
         client.start()
     }
 
-    /// Removes `reading` from the list. App-only: nothing is written to the thermometer.
+    /// Removes `reading` from the list and this phone's store for good, and cancels its pending Health write.
+    /// Nothing is written to the thermometer or deleted from CloudKit or Health.
     func delete(_ reading: ThermometerReading) {
         readings.removeAll { $0.id == reading.id }
+        sync?.delete(reading)
+        health.discard(reading)
     }
 
     func handle(_ event: ThermometerEvent) {
@@ -34,6 +37,7 @@ final class ReadingsModel {
         case .state(let state):
             self.state = state
         case .reading(let reading):
+            if sync?.isDeleted(reading) == true { return }
             readings.append(reading)
             readings.sort { $0.measuredAt > $1.measuredAt }
             health.submit(reading)

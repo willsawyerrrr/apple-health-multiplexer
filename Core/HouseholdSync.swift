@@ -32,6 +32,17 @@ final class ReadingSyncCoordinator {
         store.add(reading, uploaded: false)
     }
 
+    /// Whether the reading was deleted on this phone and so must not be shown, stored or written again.
+    func isDeleted(_ reading: ThermometerReading) -> Bool {
+        SyncReading(reading).map { store.isDeleted($0.recordName) } ?? false
+    }
+
+    /// Deletes the reading from this phone's store and outbox for good; the household's copy is untouched.
+    func delete(_ reading: ThermometerReading) {
+        guard let reading = SyncReading(reading) else { return }
+        store.delete(reading.recordName)
+    }
+
     /// Uploads the outbox, stopping at the first failure; returns whether it is empty.
     @discardableResult
     func flush() async -> Bool {
@@ -45,7 +56,7 @@ final class ReadingSyncCoordinator {
         return true
     }
 
-    /// Stores household readings not yet held locally and returns them.
+    /// Stores household readings not yet held locally and not deleted here, and returns them.
     func pull() async throws -> [ThermometerReading] {
         try await sync.fetchChanges()
             .filter { store.add($0, uploaded: true) }
