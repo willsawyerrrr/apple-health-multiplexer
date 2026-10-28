@@ -19,6 +19,8 @@ final class ReadingsModel {
         self.sync = sync
         self.health = health
         readings = (sync?.storedReadings ?? []).sorted { $0.measuredAt > $1.measuredAt }
+        health.storedReadings = { [weak self] in self?.readings ?? [] }
+        health.backfill()
         let events = client.events
         Task { [weak self] in
             for await event in events { self?.handle(event) }

@@ -114,6 +114,28 @@ struct ReadingsModelTests {
         #expect(relaunched.readings.isEmpty)
     }
 
+    @Test func backfillsStoredReadingsOnLaunchButNotDeletedOnes() {
+        let store = InMemoryReadingStore()
+        let first = makeModel(sync: makeCoordinator(store: store))
+        let kept = reading(36.1, at: 100)
+        let deleted = reading(36.5, at: 200)
+        first.handle(.reading(kept))
+        first.handle(.reading(deleted))
+        first.delete(deleted)
+
+        let relaunched = makeModel(myProfile: 1, sync: makeCoordinator(store: store))
+
+        #expect(relaunched.health.pending.map(\.name) == [SyncReading(kept)!.recordName])
+    }
+
+    @Test func backfillsReadingsReceivedBeforeProfileWasSet() {
+        let model = makeModel()
+        model.handle(.reading(reading(36.1, at: 100)))
+        model.health.myProfile = 1
+
+        #expect(model.health.pending.count == 1)
+    }
+
     @Test func deleteDropsUnwrittenHealthSample() {
         let model = makeModel(myProfile: 1)
         let a = reading(36.1, at: 100)
