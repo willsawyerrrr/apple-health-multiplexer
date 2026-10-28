@@ -33,7 +33,7 @@ jobs:
       - name: Test
         run: >
           xcodebuild test
-          -scheme AppleHealthMultiplexer
+          -scheme Kintemp
           -destination 'platform=iOS Simulator,name=iPhone 17'
           CODE_SIGNING_ALLOWED=NO
 

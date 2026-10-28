@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppleHealthMultiplexer
+@testable import Kintemp
 
 struct ReadingAttributorTests {
     private let offset: TimeInterval = 123

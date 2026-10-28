@@ -1,4 +1,4 @@
-name: AppleHealthMultiplexer
+name: Kintemp
 options:
   bundleIdPrefix: dev.willsawyerrrr
   deploymentTarget:
@@ -10,45 +10,46 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
 targets:
-  AppleHealthMultiplexer:
+  Kintemp:
     type: application
     platform: iOS
     sources: [App, Core]
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Apple Health Multiplexer
+        CFBundleDisplayName: Kintemp
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        NSBluetoothAlwaysUsageDescription: Apple Health Multiplexer connects to your ThermoCare thermometer to read its measurements.
+        NSBluetoothAlwaysUsageDescription: Kintemp reads measurements from your ThermoCare thermometer over Bluetooth.
         UIBackgroundModes: [bluetooth-central]
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.willsawyerrrr.apple-health-multiplexer
+        PRODUCT_BUNDLE_IDENTIFIER: dev.willsawyerrrr.kintemp
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: NO
-  AppleHealthMultiplexerTests:
+  KintempTests:
     type: bundle.unit-test
     platform: iOS
     sources: [Tests]
     dependencies:
-      - target: AppleHealthMultiplexer
+      - target: Kintemp
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.willsawyerrrr.apple-health-multiplexer.tests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.willsawyerrrr.kintemp.tests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
-  AppleHealthMultiplexer:
+  Kintemp:
     build:
       targets:
-        AppleHealthMultiplexer: all
+        Kintemp: all
     run:
       config: Debug
     test:
       config: Debug
-      targets: [AppleHealthMultiplexerTests]
+      targets: [KintempTests]

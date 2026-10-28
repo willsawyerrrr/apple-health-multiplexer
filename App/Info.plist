@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Apple Health Multiplexer</string>
+	<string>Kintemp</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,7 +23,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Apple Health Multiplexer connects to your ThermoCare thermometer to read its measurements.</string>
+	<string>Kintemp reads measurements from your ThermoCare thermometer over Bluetooth.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

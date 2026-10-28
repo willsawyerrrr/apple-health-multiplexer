@@ -7,7 +7,7 @@ import Foundation
 final class CoreThermometerClient: NSObject, ThermometerClient {
     let events: AsyncStream<ThermometerEvent>
 
-    private static let restoreIdentifier = "dev.willsawyerrrr.apple-health-multiplexer.central"
+    private static let restoreIdentifier = "dev.willsawyerrrr.kintemp.central"
     private static let peripheralKey = "thermometerPeripheralID"
 
     private let continuation: AsyncStream<ThermometerEvent>.Continuation

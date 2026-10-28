@@ -1,6 +1,6 @@
 import Foundation
 
-@testable import AppleHealthMultiplexer
+@testable import Kintemp
 
 extension Data {
     init(hex: String) {
