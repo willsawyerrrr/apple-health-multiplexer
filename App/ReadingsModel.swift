@@ -28,12 +28,14 @@ final class ReadingsModel {
         client.start()
     }
 
-    /// Removes `reading` from the list and this phone's store for good, and cancels its pending Health write.
-    /// Nothing is written to the thermometer or deleted from CloudKit or Health.
+    /// Removes `reading` from the list and this phone's store, and queues its deletion from the household's
+    /// CloudKit copy and from Apple Health, retrying until each succeeds. Nothing is written to the thermometer.
     func delete(_ reading: ThermometerReading) {
         readings.removeAll { $0.id == reading.id }
-        sync?.delete(reading)
-        health.discard(reading)
+        if let name = reading.recordName { health.remove(recordNames: [name]) }
+        guard let sync else { return }
+        sync.delete(reading)
+        Task { await sync.flush() }
     }
 
     func handle(_ event: ThermometerEvent) {
@@ -61,17 +63,23 @@ final class ReadingsModel {
     }
 
 
-    /// Uploads the outbox and profile changes and merges what the household shared; says whether the pull found any.
+    /// Merges the household's changes, removing readings it deleted, then deletes queued household copies
+    /// and uploads the outbox and profile changes; says whether the pull found any change. Pulling first lets
+    /// a deletion remove a reading still waiting in the outbox.
     @discardableResult
     func syncHousehold() async -> SyncOutcome {
         guard let sync else { return .noData }
+        let pulled = try? await sync.pull()
         await sync.flush()
         await profileSync?.flush()
-        guard let fetched = try? await sync.pull() else { return .failed }
+        guard let pulled else { return .failed }
         let profilesChanged = profileSync?.pull() ?? false
-        fetched.forEach(health.submit)
-        readings.append(contentsOf: fetched.filter { !readings.contains($0) })
+        let deleted = Set(pulled.deletedRecordNames)
+        readings.removeAll { $0.recordName.map(deleted.contains) == true }
+        health.remove(recordNames: pulled.deletedRecordNames)
+        pulled.added.forEach(health.submit)
+        readings.append(contentsOf: pulled.added.filter { !readings.contains($0) })
         readings.sort { $0.measuredAt > $1.measuredAt }
-        return fetched.isEmpty && !profilesChanged ? .noData : .newData
+        return pulled.added.isEmpty && pulled.deletedRecordNames.isEmpty && !profilesChanged ? .noData : .newData
     }
 }

@@ -60,12 +60,17 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   no `SyncReading` and are never uploaded.
 - `ReadingStore` is durable local storage with an outbox of readings not yet
   uploaded; `FileReadingStore` keeps it in a JSON file written atomically,
-  along with the record names deleted on this phone; `add` refuses those names.
-- `HouseholdSync` uploads a reading (a duplicate succeeds) and fetches changes
-  since the previous fetch. `CloudKitHouseholdSync` stores `Reading` records
+  along with the record names deleted (here or by the household), which `add` refuses, and the queue of
+  household copies still to be deleted. `delete` queues a household deletion only for an uploaded
+  reading; `discard` removes a reading the household deleted and queues nothing.
+- `HouseholdSync` uploads a reading (a duplicate succeeds), deletes the
+  household's copy of a reading (one already gone succeeds) and fetches changes
+  (`HouseholdChanges`: readings and deleted record names) since the previous fetch. `CloudKitHouseholdSync` stores `Reading` records
   (`profile`, `celsius`, `measuredAt`) in a `Household` zone: the shared
   database's zone when this phone is a member, else a zone it owns in the
   private database, created on demand. A `serverRecordChanged` save counts as
+  success. Deleting a reading deletes the `Reading` record with that name in the
+  resolved zone (any read-write participant may); `unknownItem` counts as
   success. The change token is persisted; an expired token restarts the fetch.
 - `Profile` records (`slot`, `name`, `ignored` 0 or 1) live in the same `Household`
   zone and database as readings, one per slot with the record name `profile-<slot>`,
@@ -73,15 +78,21 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   `serverRecordChanged` it compares the server record's `modificationDate` with the
   profile's `modifiedAt` and either returns the server's version or saves the
   profile over the server record. `fetchChanges` collects `Profile` modifications
-  and deletions (as `reset`) from the same zone change fetch, readings and profiles
+  and deletions (as `reset`) and reports deleted `Reading` record IDs from the same zone change fetch, readings and profiles
   sharing one change token, and holds them for `takeProfileChanges()`; it discards
   them when the token expires.
 - `ReadingSyncCoordinator` persists each attributed reading of a tracked profile on receipt (guest and
   ignored profiles' readings stay off the store and CloudKit), uploads
   the outbox oldest first (stopping at the first failure), and merges fetched
   household readings into the store. `delete` removes a reading from the store
-  and outbox and records its record name as deleted, so it is never uploaded,
-  stored or shown again.
+  and outbox, records its name as deleted and, if it was uploaded, queues the
+  deletion of the household's copy. `flush` first carries out queued deletions,
+  then uploads, each stopping at the first failure (offline), so both retry on the
+  next flush; a flush requested during a flush reruns afterwards. A reading
+  deleted while its upload is in flight has its household copy deleted once the
+  upload finishes. `pull` discards readings the household deleted, then adds the
+  others. The deleted-name set is a guard: queued or in-flight uploads, retries
+  and Bluetooth re-delivery cannot bring a deleted reading back.
 - `CloudKitSchemaBootstrap` (Debug only) runs `prepareShare` at launch when given `-BootstrapCloudKitSchema`, then exits.
 - `HouseholdSubscriptions.ensure` gives the private and shared databases one
   `CKDatabaseSubscription` each (`household-private`, `household-shared`),
@@ -115,6 +126,8 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   Biofab, MT-3000, hardware V1.7, firmware V2.0T, software V1.0), the same
   details the first-party app records, so Health shows the thermometer under
   Device Details even when another household phone wrote the sample.
+  `delete(name:)` deletes the samples this app wrote with that sync identifier
+  (`HKHealthStore.deleteObjects`); none is success.
 - `HealthSync` holds `myProfile` (0, 1 or 2; local, in `UserDefaults`, not
   synced) and a pending queue persisted in `UserDefaults`. `submit` queues only
   readings for `myProfile` when that profile is tracked, deduplicated by name.
@@ -132,25 +145,32 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   denied, or to the error when the request fails. `flush` requests access, then writes the queue in
   order and keeps samples whose write fails (HealthKit cannot be written while
   the phone is locked). `KintempApp` flushes when the scene becomes active and
-  when `protectedDataDidBecomeAvailableNotification` fires.
+  when `protectedDataDidBecomeAvailableNotification` fires. `remove(recordNames:)`
+  drops unwritten samples and queues Health deletions (persisted in
+  `UserDefaults`); `flush` writes first, then deletes, keeping failures (locked
+  phone) for retry. When write access is not authorized, queued deletions are
+  dropped quietly.
 
 ## App
 
 - `ReadingsModel` (`@Observable`) consumes the client's events: connection
   state, readings (newest first) and a bounded debug log. `delete(_:)` removes
-  a reading from the list and the store, and drops its unwritten Health sample.
-  Deletion is local to this phone: the CloudKit record stays (the household's
-  copy is unchanged) and a sample already written to Health stays there.
-  Readings deleted here are ignored when they arrive again over Bluetooth or
-  CloudKit, and after relaunch.
+  a reading from the list and the store, queues the deletion of its CloudKit
+  record (the household's copy, for every member) and of its Health sample, and
+  drops an unwritten Health sample. Deletion is permanent and household-wide.
+  Readings deleted here or by the household are ignored when they arrive again
+  over Bluetooth or CloudKit, and after relaunch.
   It passes each reading to `HealthSync`, records it with the coordinator and
-  runs `syncHousehold()` (flush, then pull) whenever the app becomes active.
+  runs `syncHousehold()` (pull, then flush) whenever the app becomes active. A
+  pulled deletion removes the reading from the list and queues its Health
+  deletion. Pulling first lets a deletion remove a reading still in the outbox.
 - `AppDelegate` calls `registerForRemoteNotifications()` at launch. On a
   `CKDatabaseNotification` silent push, `didReceiveRemoteNotification` runs
   `RemoteChanges`, which `KintempApp` sets at launch (so a background launch can
-  answer it) to `model.syncHousehold()`. That flushes, pulls with the change
-  token, feeds new readings to the model and `HealthSync`, and returns a
-  `SyncOutcome` (`newData`, `noData`, `failed`) that becomes the
+  answer it) to `model.syncHousehold()`. That pulls with the change token
+  (removing readings the household deleted), flushes, feeds new readings to the
+  model and `HealthSync`, and returns a `SyncOutcome` (`newData`, `noData`,
+  `failed`; a deletion counts as new data) that becomes the
   `UIBackgroundFetchResult`.
 - `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI and calls `onChange`
   after each local edit. `ProfilesView` lists and renames profiles for every thermometer slot
@@ -171,7 +191,9 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   `ShareAcceptance` to `accept(_:)`; metadata arriving before the handler is set
   is queued.
 - `MyProfilePicker` sets `myProfile` (local, never synced), labelling each slot with its profile name, and shows `accessProblem` beneath it.
-- `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete), the
+- `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete,
+  confirmed by a destructive dialog saying it deletes the reading for everyone in the
+  household and from Apple Health), the
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
   `bluetooth-central` and `remote-notification` background modes,

@@ -1,11 +1,28 @@
 import Foundation
 
+/// What changed in the household's copy since the previous fetch.
+struct HouseholdChanges: Equatable {
+    var readings: [SyncReading] = []
+    /// Record names of readings deleted from the household.
+    var deletedRecordNames: [String] = []
+}
+
+/// What a pull changed on this phone.
+struct HouseholdPull: Equatable {
+    /// Household readings not held locally before.
+    var added: [ThermometerReading] = []
+    /// Record names the household deleted; they are gone from the store.
+    var deletedRecordNames: [String] = []
+}
+
 /// The household's shared copy of the readings.
 protocol HouseholdSync: AnyObject {
     /// Uploads a reading. Uploading one the household already holds succeeds.
     func upload(_ reading: SyncReading) async throws
-    /// Readings changed since the previous fetch.
-    func fetchChanges() async throws -> [SyncReading]
+    /// Deletes the household's copy of a reading for every member. Deleting one that is already gone succeeds.
+    func delete(recordName: String) async throws
+    /// Readings changed and deleted since the previous fetch.
+    func fetchChanges() async throws -> HouseholdChanges
 }
 
 /// Persists every attributed reading on receipt, uploads the outbox, and merges household readings.
@@ -15,6 +32,7 @@ final class ReadingSyncCoordinator {
     private let sync: HouseholdSync
     private let isTracked: (Int) -> Bool
     private var isFlushing = false
+    private var flushRequested = false
 
     /// `isTracked` says whether a profile slot's readings may be persisted and shared.
     init(store: ReadingStore, sync: HouseholdSync, isTracked: @escaping (Int) -> Bool = { _ in true }) {
@@ -37,29 +55,54 @@ final class ReadingSyncCoordinator {
         SyncReading(reading).map { store.isDeleted($0.recordName) } ?? false
     }
 
-    /// Deletes the reading from this phone's store and outbox for good; the household's copy is untouched.
+    /// Deletes the reading from this phone's store and outbox, and queues the deletion of the household's
+    /// copy if it was uploaded; `flush` carries it out. The deleted name stays remembered as a guard so
+    /// an in-flight upload, a retry or a Bluetooth re-delivery cannot bring the reading back.
     func delete(_ reading: ThermometerReading) {
-        guard let reading = SyncReading(reading) else { return }
-        store.delete(reading.recordName)
+        guard let name = reading.recordName else { return }
+        store.delete(name)
     }
 
-    /// Uploads the outbox, stopping at the first failure; returns whether it is empty.
+    /// Deletes queued household copies, then uploads the outbox, each stopping at the first failure; returns
+    /// whether both are empty. A call during a flush makes it run again once it finishes.
     @discardableResult
     func flush() async -> Bool {
-        guard !isFlushing else { return false }
+        guard !isFlushing else {
+            flushRequested = true
+            return false
+        }
         isFlushing = true
         defer { isFlushing = false }
-        for reading in store.pending {
+        repeat {
+            flushRequested = false
+            guard await flushOnce() else { return false }
+        } while flushRequested
+        return true
+    }
+
+    private func flushOnce() async -> Bool {
+        for name in store.pendingDeletions {
+            do { try await sync.delete(recordName: name) } catch { return false }
+            store.markDeletionsDone([name])
+        }
+        for reading in store.pending where !store.isDeleted(reading.recordName) {
             do { try await sync.upload(reading) } catch { return false }
-            store.markUploaded([reading.recordName])
+            if store.isDeleted(reading.recordName) {
+                store.queueDeletion(reading.recordName)
+                flushRequested = true
+            } else {
+                store.markUploaded([reading.recordName])
+            }
         }
         return true
     }
 
-    /// Stores household readings not yet held locally and not deleted here, and returns them.
-    func pull() async throws -> [ThermometerReading] {
-        try await sync.fetchChanges()
-            .filter { store.add($0, uploaded: true) }
-            .map(\.reading)
+    /// Stores household readings not yet held locally and not deleted, removes those the household deleted,
+    /// and returns both.
+    func pull() async throws -> HouseholdPull {
+        let changes = try await sync.fetchChanges()
+        changes.deletedRecordNames.forEach(store.discard)
+        let added = changes.readings.filter { store.add($0, uploaded: true) }.map(\.reading)
+        return HouseholdPull(added: added, deletedRecordNames: changes.deletedRecordNames)
     }
 }

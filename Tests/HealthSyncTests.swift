@@ -5,6 +5,8 @@ import Testing
 
 private final class FakeWriter: HealthWriter, @unchecked Sendable {
     var written: [HealthSample] = []
+    var deleted: [String] = []
+    var failingDeletes = false
     var failing = true
     var status = HealthWriteStatus.notDetermined
     var grants = true
@@ -18,6 +20,10 @@ private final class FakeWriter: HealthWriter, @unchecked Sendable {
     func write(_ sample: HealthSample) async throws {
         if failing { throw Locked() }
         written.append(sample)
+    }
+    func delete(name: String) async throws {
+        if failingDeletes { throw Locked() }
+        deleted.append(name)
     }
 }
 
@@ -74,13 +80,13 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at ts: TimeInter
         #expect(relaunched.pending.isEmpty)
     }
 
-    @Test func discardForgetsWrittenReading() async {
+    @Test func removeForgetsWrittenReading() async {
         let writer = FakeWriter()
         writer.failing = false
         let (sync, _) = makeSync(writer)
         sync.submit(reading(1))
         await sync.flush()
-        sync.discard(reading(1))
+        sync.remove(recordNames: [SyncReading(reading(1))!.recordName])
         #expect(sync.written.isEmpty)
         sync.submit(reading(1))
         #expect(sync.pending.count == 1)
@@ -199,5 +205,54 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at ts: TimeInter
         writer.status = .authorized
         await sync.requestAccess()
         #expect(sync.accessProblem == nil)
+    }
+
+    @Test func removeDropsAnUnwrittenSample() {
+        let (sync, _) = makeSync(FakeWriter())
+        sync.submit(reading(1))
+        sync.remove(recordNames: ["reading-1-1793119737-364"])
+        #expect(sync.pending.isEmpty)
+    }
+
+    @Test func removeDeletesTheWrittenSample() async {
+        let writer = FakeWriter()
+        writer.failing = false
+        let (sync, _) = makeSync(writer)
+        sync.submit(reading(1))
+        await sync.flush()
+        #expect(writer.written.count == 1)
+
+        sync.remove(recordNames: ["reading-1-1793119737-364"])
+        await sync.flush()
+
+        #expect(writer.deleted == ["reading-1-1793119737-364"])
+        #expect(sync.pendingDeletions.isEmpty)
+    }
+
+    @Test func failedDeletionsStayQueuedAcrossRelaunchAndRetry() async {
+        let writer = FakeWriter()
+        writer.failingDeletes = true
+        let (sync, defaults) = makeSync(writer)
+        await sync.requestAccess()
+        sync.remove(recordNames: ["reading-1-1793119737-364"])
+        await sync.flush()
+        #expect(sync.pendingDeletions == ["reading-1-1793119737-364"])
+
+        writer.failingDeletes = false
+        let relaunched = HealthSync(writer: writer, defaults: defaults)
+        #expect(relaunched.pendingDeletions == ["reading-1-1793119737-364"])
+        await relaunched.flush()
+        #expect(writer.deleted == ["reading-1-1793119737-364"])
+        #expect(relaunched.pendingDeletions.isEmpty)
+    }
+
+    @Test func deletionsAreSkippedQuietlyWhenAccessIsDenied() async {
+        let writer = FakeWriter()
+        writer.grants = false
+        let (sync, _) = makeSync(writer)
+        sync.remove(recordNames: ["reading-1-1793119737-364"])
+        await sync.flush()
+        #expect(writer.deleted.isEmpty)
+        #expect(sync.pendingDeletions.isEmpty)
     }
 }

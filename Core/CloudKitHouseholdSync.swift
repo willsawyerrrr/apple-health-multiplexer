@@ -34,9 +34,19 @@ final class CloudKitHouseholdSync: HouseholdSync, ProfileSync {
         }
     }
 
-    func fetchChanges() async throws -> [SyncReading] {
+    func delete(recordName: String) async throws {
+        let (database, zoneID) = try await resolveLocation()
+        let (_, deleteResults) = try await database.modifyRecords(
+            saving: [], deleting: [CKRecord.ID(recordName: recordName, zoneID: zoneID)])
+        for result in deleteResults.values {
+            if case .failure(let error) = result, !Self.isAlreadyDeleted(error) { throw error }
+        }
+    }
+
+    func fetchChanges() async throws -> HouseholdChanges {
         let (database, zoneID) = try await resolveLocation()
         var readings: [SyncReading] = []
+        var deleted: [String] = []
         var token = loadToken()
         var moreComing = true
         while moreComing {
@@ -51,6 +61,7 @@ final class CloudKitHouseholdSync: HouseholdSync, ProfileSync {
             } catch let error as CKError where error.code == .changeTokenExpired {
                 token = nil
                 readings = []
+                deleted = []
                 discardFetchedProfileChanges()
                 saveToken(nil)
                 continue
@@ -68,11 +79,12 @@ final class CloudKitHouseholdSync: HouseholdSync, ProfileSync {
                     appendFetchedProfileChange(.reset(slot: slot))
                 }
             }
+            deleted += changes.deletions.filter { $0.recordType == Self.recordType }.map(\.recordID.recordName)
             token = changes.changeToken
             moreComing = changes.moreComing
         }
         saveToken(token)
-        return readings
+        return HouseholdChanges(readings: readings, deletedRecordNames: deleted)
     }
 
     func uploadProfile(_ profile: Profile) async throws -> ProfileChange {
@@ -166,6 +178,11 @@ final class CloudKitHouseholdSync: HouseholdSync, ProfileSync {
     /// the same reading is stored.
     static func isDuplicate(_ error: Error) -> Bool {
         (error as? CKError)?.code == .serverRecordChanged
+    }
+
+    /// A deletion of a record the household no longer holds.
+    static func isAlreadyDeleted(_ error: Error) -> Bool {
+        (error as? CKError)?.code == .unknownItem
     }
 
     /// The shared zone when this phone is a member; otherwise the zone this phone owns, created on demand.

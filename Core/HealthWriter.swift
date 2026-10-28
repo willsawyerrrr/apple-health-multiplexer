@@ -20,4 +20,6 @@ protocol HealthWriter {
     func requestAuthorization() async throws
     /// Writes the sample idempotently. Throws when the write cannot happen yet.
     func write(_ sample: HealthSample) async throws
+    /// Deletes the sample whose sync identifier is `name`. Succeeds when there is none; throws when the deletion cannot happen yet.
+    func delete(name: String) async throws
 }

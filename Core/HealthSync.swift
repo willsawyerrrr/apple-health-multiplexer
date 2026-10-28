@@ -1,12 +1,14 @@
 import Foundation
 import Observation
 
-/// Writes readings for this phone's owner to Apple Health, retrying until each write succeeds.
+/// Writes readings for this phone's owner to Apple Health and deletes those that were deleted, retrying
+/// until each write or deletion succeeds.
 @MainActor @Observable
 final class HealthSync {
     private static let profileKey = "myProfile"
     private static let pendingKey = "pendingHealthSamples"
     private static let writtenKey = "writtenHealthSamples"
+    private static let deletionsKey = "pendingHealthDeletions"
 
     /// The thermometer profile (0, 1 or 2) that belongs to this phone's owner; local only.
     var myProfile: Int? {
@@ -26,6 +28,8 @@ final class HealthSync {
     private(set) var pending: [HealthSample]
     /// Record names already handed to Health; never queued again, so samples deleted in Health stay deleted.
     private(set) var written: Set<String>
+    /// Sync identifiers of samples still to be deleted from Health.
+    private(set) var pendingDeletions: [String]
     /// Whether write access to Health is denied, or why requesting it failed; `nil` when there is nothing to report.
     private(set) var accessProblem: String?
 
@@ -44,6 +48,7 @@ final class HealthSync {
         pending = defaults.data(forKey: Self.pendingKey)
             .flatMap { try? JSONDecoder().decode([HealthSample].self, from: $0) } ?? []
         written = Set(defaults.stringArray(forKey: Self.writtenKey) ?? [])
+        pendingDeletions = defaults.stringArray(forKey: Self.deletionsKey) ?? []
     }
 
     /// Queues the reading when it belongs to `myProfile` and that profile is tracked, then tries to write it.
@@ -71,13 +76,15 @@ final class HealthSync {
         return true
     }
 
-    /// Drops the reading's sample if it has not been written yet and forgets that it was written; a written sample
-    /// stays in Health.
-    func discard(_ reading: ThermometerReading) {
-        guard let name = SyncReading(reading)?.recordName else { return }
-        pending.removeAll { $0.name == name }
-        written.remove(name)
+    /// Drops the readings' unwritten samples, forgets that they were written and queues the deletion of any
+    /// sample already in Health, then tries to delete it.
+    func remove(recordNames: [String]) {
+        guard !recordNames.isEmpty else { return }
+        pending.removeAll { recordNames.contains($0.name) }
+        written.subtract(recordNames)
+        pendingDeletions += recordNames.filter { !pendingDeletions.contains($0) }
         persist()
+        Task { await flush() }
     }
 
     /// When `myProfile` is set, asks for write access unless Health has already been asked, then updates `accessProblem`.
@@ -100,16 +107,29 @@ final class HealthSync {
         accessTask = nil
     }
 
-    /// Requests write access, then writes pending samples in order, keeping any that fail.
+    /// Requests write access, then writes pending samples in order and deletes the samples queued for
+    /// deletion, keeping any that fail. Without write access nothing can have been written or deleted, so
+    /// queued deletions are dropped.
     func flush() async {
-        guard !isFlushing, !pending.isEmpty else { return }
+        guard !isFlushing, !pending.isEmpty || !pendingDeletions.isEmpty else { return }
         isFlushing = true
         defer { isFlushing = false }
         await requestAccess()
         for sample in pending {
+            guard pending.contains(sample) else { continue }
             do { try await writer.write(sample) } catch { continue }
             pending.removeAll { $0.name == sample.name }
             written.insert(sample.name)
+            persist()
+        }
+        guard writer.writeStatus() == .authorized else {
+            pendingDeletions = []
+            persist()
+            return
+        }
+        while let name = pendingDeletions.first {
+            do { try await writer.delete(name: name) } catch { return }
+            pendingDeletions.removeAll { $0 == name }
             persist()
         }
     }
@@ -117,5 +137,6 @@ final class HealthSync {
     private func persist() {
         defaults.set(try? JSONEncoder().encode(pending), forKey: Self.pendingKey)
         defaults.set(written.sorted(), forKey: Self.writtenKey)
+        defaults.set(pendingDeletions, forKey: Self.deletionsKey)
     }
 }

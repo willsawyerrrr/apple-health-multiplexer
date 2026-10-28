@@ -42,4 +42,10 @@ struct HealthKitWriter: HealthWriter {
             ])
         try await store.save(healthSample)
     }
+
+    func delete(name: String) async throws {
+        let predicate = HKQuery.predicateForObjects(
+            withMetadataKey: HKMetadataKeySyncIdentifier, allowedValues: [name])
+        _ = try await store.deleteObjects(of: type, predicate: predicate)
+    }
 }

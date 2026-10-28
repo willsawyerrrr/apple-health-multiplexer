@@ -6,6 +6,7 @@ struct ReadingsView: View {
     let profiles: ProfileBook
     var invitations: AppInvitations?
     @State private var showsProfiles = false
+    @State private var readingToDelete: ThermometerReading?
 
     var body: some View {
         NavigationStack {
@@ -20,7 +21,7 @@ struct ReadingsView: View {
                         ReadingRow(reading: reading, profileName: profiles.displayName(slot: reading.profile))
                     }
                     .onDelete { offsets in
-                        for reading in offsets.map({ model.readings[$0] }) { model.delete(reading) }
+                        readingToDelete = offsets.map { model.readings[$0] }.first
                     }
                 }
                 Section {
@@ -58,6 +59,15 @@ struct ReadingsView: View {
                     }
                 },
                 message: { Text(invitations?.errorMessage ?? "") })
+            .confirmationDialog(
+                "Delete this reading?", isPresented: deletionPresented, titleVisibility: .visible,
+                presenting: readingToDelete,
+                actions: { reading in
+                    Button("Delete for Everyone", role: .destructive) { model.delete(reading) }
+                },
+                message: { _ in
+                    Text("This deletes the reading for everyone in your household and from Apple Health. It can't be undone.")
+                })
             .sheet(isPresented: $showsProfiles) {
                 ProfilesView(book: profiles, observedSlots: model.readings.compactMap(\.profile))
             }
@@ -75,6 +85,12 @@ extension ReadingsView {
         Binding(
             get: { invitations?.presentedShare.map(PresentedShare.init) },
             set: { if $0 == nil { invitations?.presentedShare = nil } })
+    }
+
+    private var deletionPresented: Binding<Bool> {
+        Binding(
+            get: { readingToDelete != nil },
+            set: { if !$0 { readingToDelete = nil } })
     }
 
     private var errorPresented: Binding<Bool> {
