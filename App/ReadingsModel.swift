@@ -19,6 +19,11 @@ final class ReadingsModel {
         client.start()
     }
 
+    /// Removes `reading` from the list. App-only: nothing is written to the thermometer.
+    func delete(_ reading: ThermometerReading) {
+        readings.removeAll { $0.id == reading.id }
+    }
+
     func handle(_ event: ThermometerEvent) {
         switch event {
         case .state(let state):

@@ -14,6 +14,9 @@ struct ReadingsView: View {
                     ForEach(model.readings) { reading in
                         ReadingRow(reading: reading)
                     }
+                    .onDelete { offsets in
+                        for reading in offsets.map({ model.readings[$0] }) { model.delete(reading) }
+                    }
                 }
                 Section {
                     DisclosureGroup("Debug log") {
