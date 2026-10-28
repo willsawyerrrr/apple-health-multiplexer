@@ -11,6 +11,9 @@ struct KintempApp: App {
     @State private var invitations: AppInvitations?
 
     init() {
+        #if DEBUG
+        if CloudKitSchemaBootstrap.isRequested { CloudKitSchemaBootstrap.runAndExit() }
+        #endif
         let profiles = ProfileBook()
         _profiles = State(initialValue: profiles)
         let cloud = Self.makeCloud()

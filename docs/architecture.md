@@ -61,6 +61,7 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   household readings into the store. `delete` removes a reading from the store
   and outbox and records its record name as deleted, so it is never uploaded,
   stored or shown again.
+- `CloudKitSchemaBootstrap` (Debug only) runs `prepareShare` at launch when given `-BootstrapCloudKitSchema`, then exits.
 - `HouseholdSharing` creates the household share and accepts an incoming one.
   `CloudKitHouseholdSharing` uses a zone-wide `CKShare` on the `Household` zone
   (read-write participants, `publicPermission` none, so private by default). It
@@ -135,9 +136,21 @@ created at runtime.
 
 Sharing needs `cloudkit.share` in the schema. Development creates it just in
 time the first time a share is saved, and the committed file carries it exactly
-as exported; Production rejects the save with "Cannot create new type
+as exported; Production (which TestFlight uses) rejects the save with "Cannot create new type
 cloudkit.share in production schema" unless it was deployed from Development.
 The alert explains this error in plain language alongside the `CKError` text.
+
+`scripts/bootstrap-cloudkit-schema.sh [simulator name]` creates such types
+without a device or a tap. It builds a Debug build for an iPhone Simulator
+(ad-hoc signed, so the iCloud entitlement applies), installs it and launches it
+with `-BootstrapCloudKitSchema`. That argument exists only in Debug builds
+(`CloudKitSchemaBootstrap`): the app runs `CloudKitHouseholdSharing.prepareShare`,
+the path the Invite button takes, prints `bootstrap: OK` or `bootstrap: FAILED, ...`
+and exits (0 success, 2 no iCloud account, 1 any other failure). On success the
+script exports the Development schema to `build/development-schema.ckdb` via
+`cktool` and the shared Apple Development 1Password Environment. The Simulator
+needs an iCloud account (Settings, Apple Account). Run the script again after a
+schema change that adds system types, then deploy.
 
 `Reading` grants no roles. The app reads and writes only the private and shared
 databases, where access comes from zone ownership and the `CKShare`; record-type
@@ -156,5 +169,6 @@ op run --environment b5zkkwxuutlttwbrv5xhgojye4 -- sh -c 'xcrun cktool import-sc
   --validate --file CloudKit/schema.ckdb'
 ```
 
-`cktool` cannot deploy to Production. After a schema change, click Deploy Schema
-Changes in the CloudKit Console.
+`cktool` cannot deploy to Production, and only Development to Production is
+possible. After a schema change, click Deploy Schema Changes in the CloudKit
+Console.
