@@ -116,7 +116,14 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
 
 `CloudKit/schema.ckdb` defines the `Reading` record type (`profile` INT64,
 `celsius` DOUBLE, `measuredAt` TIMESTAMP) in the `iCloud.dev.willsawyerrrr.kintemp`
-container. The `Household` zone and its share are created at runtime. Apply it to
+container. The `Household` zone and its share are created at runtime.
+
+`Reading` grants no roles. The app reads and writes only the private and shared
+databases, where access comes from zone ownership and the `CKShare`; record-type
+grants govern only the public database, which the app never uses. `Users` is a
+system type and keeps its default grants.
+
+Apply it to
 the Development environment with the shared Apple Development 1Password
 Environment (it supplies `CLOUDKIT_MANAGEMENT_TOKEN` and `DEVELOPMENT_TEAM`):
 
