@@ -4,8 +4,9 @@ import SwiftUI
 /// Presents `UICloudSharingController` for the household share.
 struct CloudSharingView: UIViewControllerRepresentable {
     let share: CKShare
+    let onFailure: (Error) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator { Coordinator(onFailure: onFailure) }
 
     func makeUIViewController(context: Context) -> UICloudSharingController {
         let controller = UICloudSharingController(
@@ -18,8 +19,16 @@ struct CloudSharingView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UICloudSharingController, context: Context) {}
 
     final class Coordinator: NSObject, UICloudSharingControllerDelegate {
+        let onFailure: (Error) -> Void
+
+        init(onFailure: @escaping (Error) -> Void) {
+            self.onFailure = onFailure
+        }
+
         func itemTitle(for csc: UICloudSharingController) -> String? { "Kintemp household" }
 
-        func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {}
+        func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
+            Task { @MainActor in onFailure(error) }
+        }
     }
 }

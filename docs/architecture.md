@@ -69,8 +69,14 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   calls `CKContainer.accept`. `HouseholdInvitations` (`@Observable`) drives the
   flow: `invite()` prepares the share to present, `accept(_:)` joins and then
   runs `onAccepted`, which makes `CloudKitHouseholdSync` forget its cached zone
-  and syncs, so it resolves to the shared zone. Failures surface as
-  `errorMessage`.
+  and syncs, so it resolves to the shared zone. `prepareShare` first checks
+  `CKContainer.accountStatus` (anything but available throws
+  `ICloudUnavailableError`) and logs each step. `invite()` runs it under
+  `withTimeout` (30 seconds by default, returning even if CloudKit ignores
+  cancellation) and sets `isPreparing` while it runs. Failures, including
+  timeouts and the sharing sheet's `failedToSaveShareWithError`, surface as
+  `errorMessage` carrying the `CKError` code and name, are written to the
+  debug log, and set `canRetryInvite`, so the alert offers Retry.
 - `HealthWriter` writes a `HealthSample` idempotently and requests write-only
   body temperature access. `HealthKitWriter` saves an `HKQuantitySample`
   (`bodyTemperature`, °C, start and end at the measurement time) with the
@@ -95,8 +101,9 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   runs `syncHousehold()` (flush, then pull) whenever the app becomes active.
 - `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI.
   `ProfilesView` lists and renames profiles for every thermometer slot (0, 1, 2), stored profiles and observed slots.
-- `ReadingsView`'s "Invite household" toolbar button calls `invite()` and
-  presents `CloudSharingView`, a `UICloudSharingController` wrapper offering
+- `ReadingsView`'s "Invite household" toolbar button calls `invite()` (a
+  spinner replaces it while preparing) and presents `CloudSharingView`, a
+  `UICloudSharingController` wrapper offering
   read-write and private-only permissions. `AppDelegate` installs
   `SceneDelegate`, whose `userDidAcceptCloudKitShareWith` (and the launch
   connection options' `cloudKitShareMetadata`) pass the metadata through
@@ -117,6 +124,13 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
 `CloudKit/schema.ckdb` defines the `Reading` record type (`profile` INT64,
 `celsius` DOUBLE, `measuredAt` TIMESTAMP) in the `iCloud.dev.willsawyerrrr.kintemp`
 container. The `Household` zone and its share are created at runtime.
+
+Sharing also needs the system record type `cloudkit.share` in the schema.
+Development creates it just in time the first time a share is saved; Production
+rejects the save with "Cannot create new type cloudkit.share in production
+schema". Run a debug build against Development and tap Invite household once
+before deploying the schema to Production. The alert explains this error in
+plain language alongside the `CKError` text.
 
 `Reading` grants no roles. The app reads and writes only the private and shared
 databases, where access comes from zone ownership and the `CKShare`; record-type

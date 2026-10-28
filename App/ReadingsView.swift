@@ -34,17 +34,29 @@ struct ReadingsView: View {
             .navigationTitle("Thermometer")
             .toolbar {
                 if let invitations {
-                    Button("Invite household", systemImage: "person.badge.plus") {
-                        Task { await invitations.invite() }
+                    if invitations.isPreparing {
+                        ProgressView().accessibilityLabel("Preparing invitation")
+                    } else {
+                        Button("Invite household", systemImage: "person.badge.plus") {
+                            Task { await invitations.invite() }
+                        }
                     }
-                    .disabled(invitations.isPreparing)
                 }
                 Button("Profiles", systemImage: "person.2") { showsProfiles = true }
             }
-            .sheet(item: sharePresentation) { presented in CloudSharingView(share: presented.share) }
+            .sheet(item: sharePresentation) { presented in
+                CloudSharingView(share: presented.share) { invitations?.sharingFailed($0) }
+            }
             .alert(
                 "Household", isPresented: errorPresented,
-                actions: { Button("OK") { invitations?.errorMessage = nil } },
+                actions: {
+                    if invitations?.canRetryInvite == true {
+                        Button("Retry") { Task { await invitations?.invite() } }
+                    }
+                    Button(invitations?.canRetryInvite == true ? "Cancel" : "OK", role: .cancel) {
+                        invitations?.errorMessage = nil
+                    }
+                },
                 message: { Text(invitations?.errorMessage ?? "") })
             .sheet(isPresented: $showsProfiles) {
                 ProfilesView(book: profiles, observedSlots: model.readings.compactMap(\.profile))
