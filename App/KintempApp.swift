@@ -21,6 +21,8 @@ struct KintempApp: App {
             client: CoreThermometerClient(), sync: Self.makeSync(profiles: profiles, cloud: cloud),
             health: HealthSync(writer: HealthKitWriter(), isTracked: { profiles.profile(slot: $0).isTracked }))
         _model = State(initialValue: model)
+        RemoteChanges.shared.handler = { await model.syncHousehold() }
+        if let cloud { Task { await cloud.ensureSubscriptions() } }
         _invitations = State(
             initialValue: cloud.map { cloud in
                 AppInvitations(

@@ -34,6 +34,7 @@ targets:
     entitlements:
       path: App/Kintemp.entitlements
       properties:
+        aps-environment: development
         com.apple.developer.healthkit: true
         com.apple.developer.icloud-container-identifiers:
           [iCloud.dev.willsawyerrrr.kintemp]

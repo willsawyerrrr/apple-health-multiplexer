@@ -57,13 +57,15 @@ final class ReadingsModel {
     }
 
 
-    /// Uploads the outbox and merges readings shared by the household.
-    func syncHousehold() async {
-        guard let sync else { return }
+    /// Uploads the outbox and merges readings shared by the household; says whether the pull found any.
+    @discardableResult
+    func syncHousehold() async -> SyncOutcome {
+        guard let sync else { return .noData }
         await sync.flush()
-        guard let fetched = try? await sync.pull() else { return }
+        guard let fetched = try? await sync.pull() else { return .failed }
         fetched.forEach(health.submit)
         readings.append(contentsOf: fetched.filter { !readings.contains($0) })
         readings.sort { $0.measuredAt > $1.measuredAt }
+        return fetched.isEmpty ? .noData : .newData
     }
 }

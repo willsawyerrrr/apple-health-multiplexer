@@ -9,7 +9,7 @@ final class CloudKitHouseholdSync: HouseholdSync {
     static let recordType = "Reading"
 
     private let tokenURL: URL
-    private lazy var container = CKContainer(identifier: Self.containerIdentifier)
+    lazy var container = CKContainer(identifier: Self.containerIdentifier)
     private var location: (database: CKDatabase, zoneID: CKRecordZone.ID)?
 
     init(tokenURL: URL) {

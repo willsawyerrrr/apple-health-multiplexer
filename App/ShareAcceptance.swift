@@ -21,7 +21,45 @@ final class ShareAcceptance {
     }
 }
 
+/// Runs the household sync for a silent push; set at launch so a background launch can answer it.
+@MainActor
+final class RemoteChanges {
+    static let shared = RemoteChanges()
+
+    var handler: (() async -> SyncOutcome)?
+
+    func receive() async -> SyncOutcome { await handler?() ?? .noData }
+}
+
+extension SyncOutcome {
+    var fetchResult: UIBackgroundFetchResult {
+        switch self {
+        case .newData: .newData
+        case .noData: .noData
+        case .failed: .failed
+        }
+    }
+}
+
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        application.registerForRemoteNotifications()
+        return true
+    }
+
+    func application(
+        _ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard CKNotification(fromRemoteNotificationDictionary: userInfo) is CKDatabaseNotification else {
+            completionHandler(.noData)
+            return
+        }
+        Task { @MainActor in completionHandler(await RemoteChanges.shared.receive().fetchResult) }
+    }
+
     func application(
         _ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
