@@ -46,9 +46,14 @@ final class ReadingsModel {
                 Task { await sync.flush() }
             }
         case .log(let line):
-            logLines.append("\(Date.now.formatted(date: .omitted, time: .standard)) \(line)")
-            if logLines.count > Self.maxLogLines { logLines.removeFirst(logLines.count - Self.maxLogLines) }
+            log(line)
         }
+    }
+
+    /// Appends a timestamped line to the bounded debug log.
+    func log(_ line: String) {
+        logLines.append("\(Date.now.formatted(date: .omitted, time: .standard)) \(line)")
+        if logLines.count > Self.maxLogLines { logLines.removeFirst(logLines.count - Self.maxLogLines) }
     }
 
 

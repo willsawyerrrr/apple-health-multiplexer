@@ -20,7 +20,10 @@ struct KintempApp: App {
         _model = State(initialValue: model)
         _invitations = State(
             initialValue: cloud.map { cloud in
-                AppInvitations(sharing: CloudKitHouseholdSharing()) {
+                AppInvitations(
+                    sharing: CloudKitHouseholdSharing(log: { line in Task { @MainActor in model.log(line) } }),
+                    log: { line in Task { @MainActor in model.log(line) } }
+                ) {
                     cloud.forgetLocation()
                     await model.syncHousehold()
                 }
