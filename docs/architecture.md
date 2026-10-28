@@ -110,3 +110,21 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   `NSHealthUpdateUsageDescription`, `CKSharingSupported` as `true` and
   `ITSAppUsesNonExemptEncryption` as `false`. The app's entitlements enable HealthKit and declare the
   `iCloud.dev.willsawyerrrr.kintemp` CloudKit container.
+
+## CloudKit schema
+
+`CloudKit/schema.ckdb` defines the `Reading` record type (`profile` INT64,
+`celsius` DOUBLE, `measuredAt` TIMESTAMP) in the `iCloud.dev.willsawyerrrr.kintemp`
+container. The `Household` zone and its share are created at runtime. Apply it to
+the Development environment with the shared Apple Development 1Password
+Environment (it supplies `CLOUDKIT_MANAGEMENT_TOKEN` and `DEVELOPMENT_TEAM`):
+
+```sh
+op run --environment b5zkkwxuutlttwbrv5xhgojye4 -- sh -c 'xcrun cktool import-schema \
+  --token "$CLOUDKIT_MANAGEMENT_TOKEN" --team-id "$DEVELOPMENT_TEAM" \
+  --container-id iCloud.dev.willsawyerrrr.kintemp --environment development \
+  --validate --file CloudKit/schema.ckdb'
+```
+
+`cktool` cannot deploy to Production. After a schema change, click Deploy Schema
+Changes in the CloudKit Console.
