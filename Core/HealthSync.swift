@@ -11,15 +11,23 @@ final class HealthSync {
     var myProfile: Int? {
         didSet {
             guard myProfile != oldValue else { return }
-            if let myProfile { defaults.set(myProfile, forKey: Self.profileKey) } else { defaults.removeObject(forKey: Self.profileKey) }
+            if let myProfile {
+                defaults.set(myProfile, forKey: Self.profileKey)
+                Task { await requestAccess() }
+            } else {
+                defaults.removeObject(forKey: Self.profileKey)
+            }
         }
     }
     private(set) var pending: [HealthSample]
+    /// Whether write access to Health is denied, or why requesting it failed; `nil` when there is nothing to report.
+    private(set) var accessProblem: String?
 
     private let writer: HealthWriter
     private let defaults: UserDefaults
     private let isTracked: (Int) -> Bool
     private var isFlushing = false
+    private var accessTask: Task<Void, Never>?
 
     /// `isTracked` says whether a profile slot's readings may be written to Health.
     init(writer: HealthWriter, defaults: UserDefaults = .standard, isTracked: @escaping (Int) -> Bool = { _ in true }) {
@@ -49,12 +57,32 @@ final class HealthSync {
         persist()
     }
 
+    /// When `myProfile` is set, asks for write access unless Health has already been asked, then updates `accessProblem`.
+    /// Concurrent calls share one request.
+    func requestAccess() async {
+        if let accessTask { return await accessTask.value }
+        guard myProfile != nil else { return }
+        let task = Task { @MainActor in
+            if writer.writeStatus() == .notDetermined {
+                do { try await writer.requestAuthorization() } catch { accessProblem = error.localizedDescription }
+            }
+            if writer.writeStatus() == .denied {
+                accessProblem = "Health access not granted. Enable it in Settings > Health > Data Access & Devices > Kintemp."
+            } else if accessProblem?.hasPrefix("Health access not granted") == true {
+                accessProblem = nil
+            }
+        }
+        accessTask = task
+        await task.value
+        accessTask = nil
+    }
+
     /// Requests write access, then writes pending samples in order, keeping any that fail.
     func flush() async {
         guard !isFlushing, !pending.isEmpty else { return }
         isFlushing = true
         defer { isFlushing = false }
-        try? await writer.requestAuthorization()
+        await requestAccess()
         for sample in pending {
             do { try await writer.write(sample) } catch { continue }
             pending.removeAll { $0.name == sample.name }

@@ -11,6 +11,7 @@ struct ReadingsModelTests {
     }
 
     private struct StubWriter: HealthWriter {
+        func writeStatus() -> HealthWriteStatus { .authorized }
         func requestAuthorization() async throws {}
         func write(_ sample: HealthSample) async throws { throw CancellationError() }
     }

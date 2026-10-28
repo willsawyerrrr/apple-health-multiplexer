@@ -8,7 +8,14 @@ struct HealthSample: Codable, Equatable {
     var measuredAt: Date
 }
 
+/// Whether the app may write body temperature to Apple Health.
+enum HealthWriteStatus {
+    case notDetermined, denied, authorized
+}
+
 protocol HealthWriter {
+    /// The current write access to body temperature. Read access is hidden by HealthKit and not reported.
+    func writeStatus() -> HealthWriteStatus
     /// Requests write-only access to body temperature.
     func requestAuthorization() async throws
     /// Writes the sample idempotently. Throws when the write cannot happen yet.

@@ -77,13 +77,19 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   timeouts and the sharing sheet's `failedToSaveShareWithError`, surface as
   `errorMessage` carrying the `CKError` code and name, are written to the
   debug log, and set `canRetryInvite`, so the alert offers Retry.
-- `HealthWriter` writes a `HealthSample` idempotently and requests write-only
-  body temperature access. `HealthKitWriter` saves an `HKQuantitySample`
+- `HealthWriter` writes a `HealthSample` idempotently, requests write-only
+  body temperature access and reports its `writeStatus` (HealthKit hides read
+  access, so only write access is reported). `HealthKitWriter` saves an `HKQuantitySample`
   (`bodyTemperature`, °C, start and end at the measurement time) with the
   reading's `SyncReading.recordName` as `HKMetadataKeySyncIdentifier` and `HKMetadataKeySyncVersion` 1.
 - `HealthSync` holds `myProfile` (0, 1 or 2; local, in `UserDefaults`, not
   synced) and a pending queue persisted in `UserDefaults`. `submit` queues only
-  readings for `myProfile` when that profile is tracked, deduplicated by name. `flush` writes the queue in
+  readings for `myProfile` when that profile is tracked, deduplicated by name.
+  `requestAccess` asks Health for write access once `myProfile` is set (when it
+  changes to a value, and on each launch and activation), independent of pending
+  samples, and only while the status is undetermined; concurrent calls share one
+  request. It sets `accessProblem` to a Settings hint when write access is
+  denied, or to the error when the request fails. `flush` requests access, then writes the queue in
   order and keeps samples whose write fails (HealthKit cannot be written while
   the phone is locked). `KintempApp` flushes when the scene becomes active and
   when `protectedDataDidBecomeAvailableNotification` fires.
@@ -109,7 +115,7 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   connection options' `cloudKitShareMetadata`) pass the metadata through
   `ShareAcceptance` to `accept(_:)`; metadata arriving before the handler is set
   is queued.
-- `MyProfilePicker` sets `myProfile`, labelling each slot with its profile name.
+- `MyProfilePicker` sets `myProfile`, labelling each slot with its profile name, and shows `accessProblem` beneath it.
 - `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete), the
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
