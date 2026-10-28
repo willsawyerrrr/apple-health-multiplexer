@@ -42,7 +42,9 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
 
 - `SyncReading` is an attributed reading with a deterministic record name
   (`reading-<profile>-<whole-second timestamp>-<tenths of a degree>`), so every
-  phone derives the same name for the same reading. Unattributed readings have
+  phone derives the same name for the same reading; Health uses it as the
+  sample's sync identifier, so a reading seen via Bluetooth and CloudKit maps to
+  one Health sample. Unattributed readings have
   no `SyncReading` and are never uploaded.
 - `ReadingStore` is durable local storage with an outbox of readings not yet
   uploaded; `FileReadingStore` keeps it in a JSON file written atomically.
@@ -56,12 +58,10 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   ignored profiles' readings stay off the store and CloudKit), uploads
   the outbox oldest first (stopping at the first failure), and merges fetched
   household readings into the store.
-- `HealthRecordName` builds a reading's deterministic name,
-  `<profile>-<timestamp>-<tenthsOfDegree>`.
 - `HealthWriter` writes a `HealthSample` idempotently and requests write-only
   body temperature access. `HealthKitWriter` saves an `HKQuantitySample`
-  (`bodyTemperature`, °C, start and end at the measurement time) with the name
-  as `HKMetadataKeySyncIdentifier` and `HKMetadataKeySyncVersion` 1.
+  (`bodyTemperature`, °C, start and end at the measurement time) with the
+  reading's `SyncReading.recordName` as `HKMetadataKeySyncIdentifier` and `HKMetadataKeySyncVersion` 1.
 - `HealthSync` holds `myProfile` (0, 1 or 2; local, in `UserDefaults`, not
   synced) and a pending queue persisted in `UserDefaults`. `submit` queues only
   readings for `myProfile` when that profile is tracked, deduplicated by name. `flush` writes the queue in
