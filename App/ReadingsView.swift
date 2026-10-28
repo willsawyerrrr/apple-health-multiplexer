@@ -11,7 +11,7 @@ struct ReadingsView: View {
         NavigationStack {
             List {
                 Section("Connection") { Text(model.state.description) }
-                Section("Apple Health") { MyProfilePicker(health: model.health) }
+                Section("Apple Health") { MyProfilePicker(health: model.health, book: profiles) }
                 Section("Readings") {
                     if model.readings.isEmpty {
                         Text("No readings yet").foregroundStyle(.secondary)

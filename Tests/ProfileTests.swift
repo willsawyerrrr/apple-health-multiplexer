@@ -48,11 +48,11 @@ struct ProfileTests {
         #expect(ProfileDirectory(store: MemoryStore()).displayName(slot: nil) == "Ambiguous")
     }
 
-    @Test func slotsIncludeGuestStoredAndObserved() {
+    @Test func slotsIncludeThermometerStoredAndObserved() {
         let store = MemoryStore()
         store.profiles = [Profile(slot: 3)]
         let directory = ProfileDirectory(store: store)
-        #expect(directory.slots(observed: [1, 3]) == [0, 1, 3])
+        #expect(directory.slots(observed: [1, 4]) == [0, 1, 2, 3, 4])
     }
 
     @Test func ignoredAndOwnerPersist() {
@@ -70,5 +70,21 @@ struct ProfileTests {
         let store = UserDefaultsProfileStore(defaults: defaults)
         store.save([Profile(slot: 1, name: "Alex")])
         #expect(store.load() == [Profile(slot: 1, name: "Alex")])
+    }
+}
+
+struct ProfileSlotListingTests {
+    @Test func listsEveryThermometerSlotWithoutReadings() {
+        #expect(ProfileDirectory(store: MemoryStore()).slots() == [0, 1, 2])
+    }
+
+    @Test func includesObservedSlotsBeyondThermometerSlots() {
+        #expect(ProfileDirectory(store: MemoryStore()).slots(observed: [5, 1]) == [0, 1, 2, 5])
+    }
+
+    @Test func includesStoredProfilesBeyondThermometerSlots() {
+        let store = MemoryStore()
+        store.profiles = [Profile(slot: 4)]
+        #expect(ProfileDirectory(store: store).slots() == [0, 1, 2, 4])
     }
 }

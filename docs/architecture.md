@@ -94,7 +94,7 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   It passes each reading to `HealthSync`, records it with the coordinator and
   runs `syncHousehold()` (flush, then pull) whenever the app becomes active.
 - `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI.
-  `ProfilesView` renames profiles (guest slot, stored and observed slots).
+  `ProfilesView` lists and renames profiles for every thermometer slot (0, 1, 2), stored profiles and observed slots.
 - `ReadingsView`'s "Invite household" toolbar button calls `invite()` and
   presents `CloudSharingView`, a `UICloudSharingController` wrapper offering
   read-write and private-only permissions. `AppDelegate` installs
@@ -102,7 +102,7 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   connection options' `cloudKitShareMetadata`) pass the metadata through
   `ShareAcceptance` to `accept(_:)`; metadata arriving before the handler is set
   is queued.
-- `MyProfilePicker` sets `myProfile`.
+- `MyProfilePicker` sets `myProfile`, labelling each slot with its profile name.
 - `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete), the
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
