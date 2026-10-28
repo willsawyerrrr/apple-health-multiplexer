@@ -5,6 +5,15 @@ struct HealthKitWriter: HealthWriter {
     private let store = HKHealthStore()
     private let type = HKQuantityType(.bodyTemperature)
 
+    func writeStatus() -> HealthWriteStatus {
+        switch store.authorizationStatus(for: type) {
+        case .notDetermined: .notDetermined
+        case .sharingDenied: .denied
+        case .sharingAuthorized: .authorized
+        @unknown default: .notDetermined
+        }
+    }
+
     func requestAuthorization() async throws {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         try await store.requestAuthorization(toShare: [type], read: [])

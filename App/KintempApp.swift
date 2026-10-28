@@ -41,6 +41,7 @@ struct KintempApp: App {
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     if phase == .active {
                         Task { await model.syncHousehold() }
+                        Task { await model.health.requestAccess() }
                         Task { await model.health.flush() }
                     }
                 }

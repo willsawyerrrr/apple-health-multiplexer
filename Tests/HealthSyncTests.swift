@@ -6,8 +6,15 @@ import Testing
 private final class FakeWriter: HealthWriter, @unchecked Sendable {
     var written: [HealthSample] = []
     var failing = true
+    var status = HealthWriteStatus.notDetermined
+    var grants = true
+    var requests = 0
     struct Locked: Error {}
-    func requestAuthorization() async throws {}
+    func writeStatus() -> HealthWriteStatus { status }
+    func requestAuthorization() async throws {
+        requests += 1
+        status = grants ? .authorized : .denied
+    }
     func write(_ sample: HealthSample) async throws {
         if failing { throw Locked() }
         written.append(sample)
@@ -83,5 +90,46 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at ts: TimeInter
         let relaunched = HealthSync(writer: FakeWriter(), defaults: defaults)
         #expect(relaunched.myProfile == 1)
         #expect(relaunched.pending == sync.pending)
+    }
+
+    @Test func requestsAccessWhenProfileIsSet() async {
+        let writer = FakeWriter()
+        let (sync, _) = makeSync(writer, profile: nil)
+        await sync.requestAccess()
+        #expect(writer.requests == 0)
+        sync.myProfile = 2
+        await sync.requestAccess()
+        #expect(writer.requests == 1)
+        #expect(sync.accessProblem == nil)
+    }
+
+    @Test func requestsAccessOnLaunchWhenProfileAlreadySet() async {
+        let writer = FakeWriter()
+        let (_, defaults) = makeSync(FakeWriter())
+        let relaunched = HealthSync(writer: writer, defaults: defaults)
+        await relaunched.requestAccess()
+        #expect(writer.requests == 1)
+    }
+
+    @Test func doesNotRequestAccessAgainOnceDetermined() async {
+        let writer = FakeWriter()
+        let (sync, _) = makeSync(writer)
+        await sync.requestAccess()
+        sync.myProfile = 0
+        await sync.requestAccess()
+        sync.submit(reading(0))
+        await sync.flush()
+        #expect(writer.requests == 1)
+    }
+
+    @Test func reportsDeniedAccess() async {
+        let writer = FakeWriter()
+        writer.grants = false
+        let (sync, _) = makeSync(writer)
+        await sync.requestAccess()
+        #expect(sync.accessProblem?.contains("Settings > Health") == true)
+        writer.status = .authorized
+        await sync.requestAccess()
+        #expect(sync.accessProblem == nil)
     }
 }
