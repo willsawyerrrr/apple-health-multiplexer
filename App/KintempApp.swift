@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct AppleHealthMultiplexerApp: App {
+struct KintempApp: App {
     @State private var model = ReadingsModel(client: CoreThermometerClient())
 
     var body: some Scene {
