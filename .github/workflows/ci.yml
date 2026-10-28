@@ -44,7 +44,7 @@ jobs:
               exit 1
             fi
             devicetype=$(xcrun simctl list devicetypes -j | jq -r '
-              [.devicetypes[] | select(.productFamily == "iPhone")][-1].identifier')
+              [.devicetypes[] | select(.name | startswith("iPhone"))][-1].identifier')
             udid=$(xcrun simctl create Kintemp-CI "$devicetype" "$runtime")
           fi
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
