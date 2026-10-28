@@ -10,14 +10,22 @@ struct KintempApp: App {
         let profiles = ProfileBook()
         _profiles = State(initialValue: profiles)
         _model = State(
-            initialValue: ReadingsModel(client: CoreThermometerClient(), sync: Self.makeSync(profiles: profiles)))
+            initialValue: ReadingsModel(
+                client: CoreThermometerClient(), sync: Self.makeSync(profiles: profiles),
+                health: HealthSync(writer: HealthKitWriter(), isTracked: { profiles.profile(slot: $0).isTracked })))
     }
 
     var body: some Scene {
         WindowGroup {
             ReadingsView(model: model, profiles: profiles)
                 .onChange(of: scenePhase, initial: true) { _, phase in
-                    if phase == .active { Task { await model.syncHousehold() } }
+                    if phase == .active {
+                        Task { await model.syncHousehold() }
+                        Task { await model.health.flush() }
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in
+                    Task { await model.health.flush() }
                 }
         }
     }

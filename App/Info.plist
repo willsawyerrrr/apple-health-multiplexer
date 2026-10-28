@@ -24,6 +24,8 @@
 	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Kintemp reads measurements from your ThermoCare thermometer over Bluetooth.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Kintemp saves your thermometer readings to Apple Health as body temperature.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

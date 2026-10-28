@@ -27,10 +27,12 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSBluetoothAlwaysUsageDescription: Kintemp reads measurements from your ThermoCare thermometer over Bluetooth.
         UIBackgroundModes: [bluetooth-central, remote-notification]
+        NSHealthUpdateUsageDescription: Kintemp saves your thermometer readings to Apple Health as body temperature.
         ITSAppUsesNonExemptEncryption: false
     entitlements:
       path: App/Kintemp.entitlements
       properties:
+        com.apple.developer.healthkit: true
         com.apple.developer.icloud-container-identifiers:
           [iCloud.dev.willsawyerrrr.kintemp]
         com.apple.developer.icloud-services: [CloudKit]

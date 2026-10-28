@@ -10,10 +10,12 @@ final class ReadingsModel {
     private static let maxLogLines = 300
     private let client: ThermometerClient
     private let sync: ReadingSyncCoordinator?
+    let health: HealthSync
 
-    init(client: ThermometerClient, sync: ReadingSyncCoordinator? = nil) {
+    init(client: ThermometerClient, sync: ReadingSyncCoordinator? = nil, health: HealthSync) {
         self.client = client
         self.sync = sync
+        self.health = health
         readings = (sync?.storedReadings ?? []).sorted { $0.measuredAt > $1.measuredAt }
         let events = client.events
         Task { [weak self] in
@@ -34,6 +36,7 @@ final class ReadingsModel {
         case .reading(let reading):
             readings.append(reading)
             readings.sort { $0.measuredAt > $1.measuredAt }
+            health.submit(reading)
             if let sync {
                 sync.record(reading)
                 Task { await sync.flush() }
@@ -50,6 +53,7 @@ final class ReadingsModel {
         guard let sync else { return }
         await sync.flush()
         guard let fetched = try? await sync.pull() else { return }
+        fetched.forEach(health.submit)
         readings.append(contentsOf: fetched.filter { !readings.contains($0) })
         readings.sort { $0.measuredAt > $1.measuredAt }
     }

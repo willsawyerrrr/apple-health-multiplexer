@@ -2,7 +2,8 @@
 
 ```
 CoreThermometerClient (CoreBluetooth) ──events──▶ ReadingsModel ──▶ ReadingsView
-        │
+        │                                      │
+        │                                      └──▶ HealthSync ──▶ HealthWriter (HealthKit)
         └── ReadingAttributor, TemperatureMeasurement, QueueRead, Profile, ProfileDirectory (pure)
 
 ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local outbox)
@@ -55,6 +56,18 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   ignored profiles' readings stay off the store and CloudKit), uploads
   the outbox oldest first (stopping at the first failure), and merges fetched
   household readings into the store.
+- `HealthRecordName` builds a reading's deterministic name,
+  `<profile>-<timestamp>-<tenthsOfDegree>`.
+- `HealthWriter` writes a `HealthSample` idempotently and requests write-only
+  body temperature access. `HealthKitWriter` saves an `HKQuantitySample`
+  (`bodyTemperature`, °C, start and end at the measurement time) with the name
+  as `HKMetadataKeySyncIdentifier` and `HKMetadataKeySyncVersion` 1.
+- `HealthSync` holds `myProfile` (0, 1 or 2; local, in `UserDefaults`, not
+  synced) and a pending queue persisted in `UserDefaults`. `submit` queues only
+  readings for `myProfile` when that profile is tracked, deduplicated by name. `flush` writes the queue in
+  order and keeps samples whose write fails (HealthKit cannot be written while
+  the phone is locked). `KintempApp` flushes when the scene becomes active and
+  when `protectedDataDidBecomeAvailableNotification` fires.
 
 ## App
 
@@ -62,13 +75,15 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   state, readings (newest first) and a bounded debug log. `delete(_:)` removes
   a reading from the list only; `ReadingAttributor`'s dedupe set keeps a
   re-delivered reading from reappearing.
-  It records each reading with the coordinator and runs `syncHousehold()`
-  (flush, then pull) whenever the app becomes active.
+  It passes each reading to `HealthSync`, records it with the coordinator and
+  runs `syncHousehold()` (flush, then pull) whenever the app becomes active.
 - `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI.
   `ProfilesView` renames profiles (guest slot, stored and observed slots).
+- `MyProfilePicker` sets `myProfile`.
 - `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete), the
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
-  `bluetooth-central` and `remote-notification` background modes and
-  `ITSAppUsesNonExemptEncryption` as `false`. The app's entitlements declare the
+  `bluetooth-central` and `remote-notification` background modes,
+  `NSHealthUpdateUsageDescription` and `ITSAppUsesNonExemptEncryption` as
+  `false`. The app's entitlements enable HealthKit and declare the
   `iCloud.dev.willsawyerrrr.kintemp` CloudKit container.
