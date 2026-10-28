@@ -16,6 +16,11 @@ final class CloudKitHouseholdSync: HouseholdSync {
         self.tokenURL = tokenURL
     }
 
+    /// Re-resolves the zone on the next call, after the household's share is accepted.
+    func forgetLocation() {
+        location = nil
+    }
+
     func upload(_ reading: SyncReading) async throws {
         let (database, zoneID) = try await resolveLocation()
         let record = Self.record(for: reading, in: zoneID)

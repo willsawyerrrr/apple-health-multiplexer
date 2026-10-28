@@ -61,6 +61,16 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   household readings into the store. `delete` removes a reading from the store
   and outbox and records its record name as deleted, so it is never uploaded,
   stored or shown again.
+- `HouseholdSharing` creates the household share and accepts an incoming one.
+  `CloudKitHouseholdSharing` uses a zone-wide `CKShare` on the `Household` zone
+  (read-write participants, `publicPermission` none, so private by default). It
+  reuses the shared database's share when this phone is a member; otherwise it
+  creates the zone in the private database if needed, and the share. Accepting
+  calls `CKContainer.accept`. `HouseholdInvitations` (`@Observable`) drives the
+  flow: `invite()` prepares the share to present, `accept(_:)` joins and then
+  runs `onAccepted`, which makes `CloudKitHouseholdSync` forget its cached zone
+  and syncs, so it resolves to the shared zone. Failures surface as
+  `errorMessage`.
 - `HealthWriter` writes a `HealthSample` idempotently and requests write-only
   body temperature access. `HealthKitWriter` saves an `HKQuantitySample`
   (`bodyTemperature`, °C, start and end at the measurement time) with the
@@ -85,11 +95,18 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   runs `syncHousehold()` (flush, then pull) whenever the app becomes active.
 - `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI.
   `ProfilesView` renames profiles (guest slot, stored and observed slots).
+- `ReadingsView`'s "Invite household" toolbar button calls `invite()` and
+  presents `CloudSharingView`, a `UICloudSharingController` wrapper offering
+  read-write and private-only permissions. `AppDelegate` installs
+  `SceneDelegate`, whose `userDidAcceptCloudKitShareWith` (and the launch
+  connection options' `cloudKitShareMetadata`) pass the metadata through
+  `ShareAcceptance` to `accept(_:)`; metadata arriving before the handler is set
+  is queued.
 - `MyProfilePicker` sets `myProfile`.
 - `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete), the
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
   `bluetooth-central` and `remote-notification` background modes,
-  `NSHealthUpdateUsageDescription` and `ITSAppUsesNonExemptEncryption` as
-  `false`. The app's entitlements enable HealthKit and declare the
+  `NSHealthUpdateUsageDescription`, `CKSharingSupported` as `true` and
+  `ITSAppUsesNonExemptEncryption` as `false`. The app's entitlements enable HealthKit and declare the
   `iCloud.dev.willsawyerrrr.kintemp` CloudKit container.
