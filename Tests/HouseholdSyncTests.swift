@@ -11,9 +11,17 @@ final class InMemoryReadingStore: ReadingStore {
         entries.filter { !$0.uploaded }.map(\.reading).sorted { $0.measuredAt < $1.measuredAt }
     }
     func add(_ reading: SyncReading, uploaded: Bool) -> Bool {
-        guard !entries.contains(where: { $0.reading == reading }) else { return false }
+        guard !deleted.contains(reading.recordName), !entries.contains(where: { $0.reading == reading }) else {
+            return false
+        }
         entries.append((reading, uploaded))
         return true
+    }
+    private var deleted: Set<String> = []
+    func isDeleted(_ recordName: String) -> Bool { deleted.contains(recordName) }
+    func delete(_ recordName: String) {
+        entries.removeAll { $0.reading.recordName == recordName }
+        deleted.insert(recordName)
     }
     func markUploaded(_ recordNames: [String]) {
         for index in entries.indices where recordNames.contains(entries[index].reading.recordName) {
@@ -97,6 +105,36 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at seconds: Time
         #expect(!store.add(a, uploaded: true))
         #expect(store.pending == [a])
     }
+
+    @Test func deletedReadingStaysDeletedAcrossInstances() {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = FileReadingStore(url: url)
+        let a = SyncReading(reading(1))!
+        let b = SyncReading(reading(2))!
+        store.add(a, uploaded: false)
+        store.add(b, uploaded: true)
+        store.delete(a.recordName)
+        #expect(store.all == [b])
+        #expect(store.pending.isEmpty)
+        #expect(!store.add(a, uploaded: true))
+
+        let reloaded = FileReadingStore(url: url)
+        #expect(reloaded.all == [b])
+        #expect(reloaded.isDeleted(a.recordName))
+        #expect(!reloaded.add(a, uploaded: false))
+    }
+
+    @Test func readsAStoreWrittenAsABareEntryList() throws {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let a = SyncReading(reading(1))!
+        let legacy = "[{\"reading\":\(String(decoding: try JSONEncoder().encode(a), as: UTF8.self)),\"uploaded\":false}]"
+        try Data(legacy.utf8).write(to: url)
+        let store = FileReadingStore(url: url)
+        #expect(store.all == [a])
+        #expect(store.pending == [a])
+    }
 }
 
 @MainActor
@@ -141,6 +179,26 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at seconds: Time
         #expect(await c.flush())
         #expect(remote.uploaded.count == 1)
         #expect(store.pending.isEmpty)
+    }
+
+    @Test func deletedReadingIsNeverUploaded() async {
+        let c = coordinator
+        c.record(reading(1))
+        c.delete(reading(1))
+        #expect(await c.flush())
+        #expect(remote.uploaded.isEmpty)
+        #expect(c.storedReadings.isEmpty)
+        #expect(c.isDeleted(reading(1)))
+    }
+
+    @Test func deletedReadingIsNotRecordedOrPulledAgain() async throws {
+        let c = coordinator
+        c.record(reading(1))
+        c.delete(reading(1))
+        c.record(reading(1))
+        remote.changes = [SyncReading(reading(1))!]
+        #expect(try await c.pull().isEmpty)
+        #expect(store.all.isEmpty)
     }
 
     @Test func pullReturnsOnlyReadingsNotHeldLocally() async throws {

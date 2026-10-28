@@ -42,6 +42,13 @@ final class HealthSync {
         Task { await flush() }
     }
 
+    /// Drops the reading's sample if it has not been written yet; a written sample stays in Health.
+    func discard(_ reading: ThermometerReading) {
+        guard let name = SyncReading(reading)?.recordName, pending.contains(where: { $0.name == name }) else { return }
+        pending.removeAll { $0.name == name }
+        persist()
+    }
+
     /// Requests write access, then writes pending samples in order, keeping any that fail.
     func flush() async {
         guard !isFlushing, !pending.isEmpty else { return }
