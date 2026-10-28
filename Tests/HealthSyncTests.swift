@@ -57,6 +57,35 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at ts: TimeInter
         #expect(sync.pending.count == 1)
     }
 
+    @Test func writtenReadingIsNotRequeuedAfterRelaunch() async {
+        let writer = FakeWriter()
+        writer.failing = false
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let first = HealthSync(writer: writer, defaults: defaults)
+        first.myProfile = 1
+        first.submit(reading(1))
+        await first.flush()
+        #expect(writer.written.count == 1)
+
+        let relaunched = HealthSync(writer: writer, defaults: defaults)
+        relaunched.storedReadings = { [reading(1)] }
+        relaunched.backfill()
+        relaunched.submit(reading(1))
+        #expect(relaunched.pending.isEmpty)
+    }
+
+    @Test func discardForgetsWrittenReading() async {
+        let writer = FakeWriter()
+        writer.failing = false
+        let (sync, _) = makeSync(writer)
+        sync.submit(reading(1))
+        await sync.flush()
+        sync.discard(reading(1))
+        #expect(sync.written.isEmpty)
+        sync.submit(reading(1))
+        #expect(sync.pending.count == 1)
+    }
+
     @Test func backfillNeverQueuesGuestProfile() {
         let (sync, _) = makeSync(FakeWriter(), profile: nil)
         sync.storedReadings = { [reading(0)] }

@@ -118,6 +118,9 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
 - `HealthSync` holds `myProfile` (0, 1 or 2; local, in `UserDefaults`, not
   synced) and a pending queue persisted in `UserDefaults`. `submit` queues only
   readings for `myProfile` when that profile is tracked, deduplicated by name.
+  The names of samples successfully written are kept in `UserDefaults`
+  (`written`) and never queued again, so a sample deleted in Health is not
+  resurrected; `discard` forgets the name.
   `backfill` queues every reading in `storedReadings` (the model's readings,
   which exclude deleted ones) the same way; it runs when `myProfile` changes to
   a value and when `ReadingsModel` is created, so readings that arrived before
