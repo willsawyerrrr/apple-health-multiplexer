@@ -121,21 +121,23 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
 
 ## CloudKit schema
 
-`CloudKit/schema.ckdb` defines the `Reading` record type (`profile` INT64,
-`celsius` DOUBLE, `measuredAt` TIMESTAMP) in the `iCloud.dev.willsawyerrrr.kintemp`
-container. The `Household` zone and its share are created at runtime.
+`CloudKit/schema.ckdb` mirrors the Development environment of the
+`iCloud.dev.willsawyerrrr.kintemp` container. It defines the `Reading` record
+type (`profile` INT64, `celsius` DOUBLE, `measuredAt` TIMESTAMP) and the system
+types `Users` and `cloudkit.share`. The `Household` zone and its share are
+created at runtime.
 
-Sharing also needs the system record type `cloudkit.share` in the schema.
-Development creates it just in time the first time a share is saved; Production
-rejects the save with "Cannot create new type cloudkit.share in production
-schema". Run a debug build against Development and tap Invite household once
-before deploying the schema to Production. The alert explains this error in
-plain language alongside the `CKError` text.
+Sharing needs `cloudkit.share` in the schema. Development creates it just in
+time the first time a share is saved, and the committed file carries it exactly
+as exported; Production rejects the save with "Cannot create new type
+cloudkit.share in production schema" unless it was deployed from Development.
+The alert explains this error in plain language alongside the `CKError` text.
 
 `Reading` grants no roles. The app reads and writes only the private and shared
 databases, where access comes from zone ownership and the `CKShare`; record-type
-grants govern only the public database, which the app never uses. `Users` is a
-system type and keeps its default grants.
+grants govern only the public database, which the app never uses. `Users` and
+`cloudkit.share` are system types and keep their system-assigned grants, which
+likewise apply only to the public database.
 
 Apply it to
 the Development environment with the shared Apple Development 1Password
