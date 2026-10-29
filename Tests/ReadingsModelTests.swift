@@ -14,12 +14,15 @@ struct ReadingsModelTests {
         func writeStatus() -> HealthWriteStatus { .authorized }
         func requestAuthorization() async throws {}
         func write(_ sample: HealthSample) async throws { throw CancellationError() }
+        func delete(name: String) async throws { throw CancellationError() }
     }
 
     private final class StubSync: HouseholdSync {
         var changes: [SyncReading] = []
+        var deletions: [String] = []
         func upload(_ reading: SyncReading) async throws {}
-        func fetchChanges() async throws -> [SyncReading] { changes }
+        func delete(recordName: String) async throws {}
+        func fetchChanges() async throws -> HouseholdChanges { HouseholdChanges(readings: changes, deletedRecordNames: deletions) }
     }
 
     private func makeModel(myProfile: Int? = nil, sync: ReadingSyncCoordinator? = nil) -> ReadingsModel {
@@ -155,5 +158,35 @@ struct ReadingsModelTests {
         model.handle(.reading(other))
 
         #expect(model.health.pending.map(\.celsius) == [36.1])
+    }
+
+    @Test func deleteQueuesHouseholdAndHealthDeletion() async {
+        let store = InMemoryReadingStore()
+        let model = makeModel(myProfile: 1, sync: makeCoordinator(store: store))
+        let a = reading(36.1, at: 100)
+        store.add(SyncReading(a)!, uploaded: true)
+        model.handle(.reading(a))
+
+        model.delete(a)
+
+        #expect(model.readings.isEmpty)
+        #expect(store.pendingDeletions == [SyncReading(a)!.recordName])
+        #expect(model.health.pendingDeletions == [SyncReading(a)!.recordName])
+    }
+
+    @Test func pulledHouseholdDeletionRemovesTheReadingAndItsHealthSample() async {
+        let remote = StubSync()
+        let model = makeModel(myProfile: 1, sync: makeCoordinator(remote: remote))
+        let a = reading(36.1, at: 100)
+        let b = reading(36.5, at: 200)
+        model.handle(.reading(a))
+        model.handle(.reading(b))
+        remote.deletions = [SyncReading(a)!.recordName]
+
+        await model.syncHousehold()
+
+        #expect(model.readings == [b])
+        #expect(model.health.pending.map(\.name) == [SyncReading(b)!.recordName])
+        #expect(model.health.pendingDeletions == [SyncReading(a)!.recordName])
     }
 }

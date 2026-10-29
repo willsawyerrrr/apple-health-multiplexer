@@ -194,6 +194,7 @@ private struct PhoneRig {
             func writeStatus() -> HealthWriteStatus { .authorized }
             func requestAuthorization() async throws {}
             func write(_ sample: HealthSample) async throws {}
+            func delete(name: String) async throws {}
         }
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let health = HealthSync(writer: StubWriter(), defaults: defaults)
@@ -274,6 +275,7 @@ struct ProfileMergeTests {
         func writeStatus() -> HealthWriteStatus { .authorized }
         func requestAuthorization() async throws {}
         func write(_ sample: HealthSample) async throws {}
+        func delete(name: String) async throws {}
     }
 
     private final class StubClient: ThermometerClient {

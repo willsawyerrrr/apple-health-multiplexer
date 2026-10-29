@@ -1,5 +1,10 @@
 import Foundation
 
+extension ThermometerReading {
+    /// The reading's deterministic record name; `nil` when it is ambiguous.
+    var recordName: String? { SyncReading(self)?.recordName }
+}
+
 /// A reading attributed to a profile, as stored locally and shared with the household.
 struct SyncReading: Codable, Equatable, Identifiable {
     let recordName: String
