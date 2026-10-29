@@ -68,30 +68,47 @@ with records by timestamp equality. One read per indication misses records.
 The app never writes to any characteristic: popping records through the queue
 pop characteristic would also delete the 2A1C readings.
 
-## Writes by the first-party app
+## Profile select and enabled-slot mask
 
-Observed in PacketLogger captures of the first-party app. Kintemp sends none of
-these. Profile names, genders, birth dates and the cap of 10 profiles live in
-the first-party app, not on the thermometer: adding a profile writes nothing
-to it until it is selected.
+Observed in PacketLogger captures of the first-party app and verified by
+writing to the thermometer from a standalone test script. Kintemp sends none of
+these writes. Profile names, genders, birth dates and the cap of 10 profiles
+live in the first-party app, not on the thermometer, which shows only profile
+numbers: adding a profile writes nothing to it until it is selected.
 
-All writes below are ATT Write Requests on handle `0x23` (the profile command
-characteristic `2A74`), in this order when a profile is selected:
+Both writes are ATT Write Requests (with response) to the profile command
+characteristic `2A74`, handle `0x23`. The first-party app sends them in this
+order when a profile is selected, each twice a few hundred ms apart:
 
-| Write                                 | Meaning                         |
-| ------------------------------------- | ------------------------------- |
-| `54 FF FF`                            | Unidentified; precedes the rest |
-| `55 4E 00 MM MM` + 12 × `00`, `FF FF` | Enabled-slot mask (19 bytes)    |
-| `55 00 0P FF FF`                      | Select profile `P` (5 bytes)    |
+| Write                                 | Meaning                       |
+| ------------------------------------- | ----------------------------- |
+| `55 4E 00 MM MM` + 12 × `00`, `FF FF` | Enabled-slot mask (19 bytes)  |
+| `55 00 PP FF FF`                      | Select profile `PP` (5 bytes) |
 
-The mask and select are each sent twice, a few hundred ms apart.
+### Select
+
+`PP` is one byte. Verified:
+
+- The select needs no mask write before it.
+- `2A78` reads back the selected profile immediately (`0002` after selecting
+  2, `00FF` after selecting 255).
+- The next measurement's `2A75` record carries that profile in bytes 16-17
+  (selecting 2, 1, 9, 12 and 255 stamped `0002`, `0001`, `0009`, `000C` and
+  `00FF`).
+- The selection persists after the thermometer drops the connection when a
+  measurement starts.
+- Any value 0-255 is accepted: the thermometer does not validate against the
+  mask or the first-party app's 10-profile cap.
 
 ### Enabled-slot mask
 
-`MM MM` is a big-endian `UInt16`; the thermometer also reports it when
-`2A79` is read (`00E0 0000…` with slots 0-2 enabled). Slot `n` is bit
-`(7 - n) mod 16`: slots 0-7 take bits 7 down to 0, slots 8-15 take bits 15
-down to 8. Slot 0 (the guest slot) is always set.
+`MM MM` is a big-endian `UInt16`. `2A79` reads back the mask in its first two
+bytes (`E0FF 0000…`, 14 bytes) and reflects a write immediately (writing
+`F0FF` read back as `F0FF`). The mask has no visible effect on selecting or
+stamping readings; it appears to hold the first-party app's list of enabled
+profiles. Slot `n` is bit `(7 - n) mod 16`, as seen in the first-party app:
+slots 0-7 take bits 7 down to 0, slots 8-15 take bits 15 down to 8. Slot 0 (the
+guest slot) is always set.
 
 | Enabled slots | Mask     |
 | ------------- | -------- |
@@ -100,18 +117,15 @@ down to 8. Slot 0 (the guest slot) is always set.
 | 0-10          | `0xE0FF` |
 
 Adding a profile sets its bit; removing one clears it (`0x00F0` to `0x00E0`
-when slot 3 was removed). The thermometer shows no names, only profile numbers.
+when slot 3 was removed).
 
-### Not verified
+### Other writes
 
-- Whether the thermometer accepts a select for slots above 3, or without the
-  mask write before it.
-- Whether a select changes the profile stamped on the next measurement, and
-  whether it persists after the thermometer drops the connection.
-- The purpose of `54 FF FF`, and of the writes to handles `0x0F` (`02 00`),
-  `0x4E` (`31 31 31 31`), `0x13` (`02 00`) and `0x27` seen on each connection.
-- Handle `0x5C` is written with the current Unix time (4 bytes, big-endian) on
-  each connection: a clock sync.
+The first-party app also writes `54 FF FF` to `2A74` before the mask, and on
+each connection writes `02 00` to handles `0x0F` and `0x13`, `31 31 31 31` to
+`0x4E`, and the current Unix time (4 bytes, big-endian) to `0x5C`, which is
+probably a clock sync. Their purposes are unverified, and none are needed to
+select a profile.
 
 ## Per-connection routine
 
