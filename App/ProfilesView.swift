@@ -32,6 +32,7 @@ private struct ProfileRow: View {
             }
         }
         .onAppear { name = book.profile(slot: slot).name }
+        .onChange(of: book.profile(slot: slot).name) { _, name in self.name = name }
         .onDisappear { book.rename(slot: slot, to: name) }
     }
 }

@@ -11,6 +11,8 @@ final class ReadingsModel {
     private let client: ThermometerClient
     private let sync: ReadingSyncCoordinator?
     let health: HealthSync
+    /// Shares profile names with the household; set once the household sync exists.
+    var profileSync: ProfileSyncCoordinator?
 
     init(client: ThermometerClient, sync: ReadingSyncCoordinator? = nil, health: HealthSync) {
         self.client = client
@@ -57,15 +59,17 @@ final class ReadingsModel {
     }
 
 
-    /// Uploads the outbox and merges readings shared by the household; says whether the pull found any.
+    /// Uploads the outbox and profile changes and merges what the household shared; says whether the pull found any.
     @discardableResult
     func syncHousehold() async -> SyncOutcome {
         guard let sync else { return .noData }
         await sync.flush()
+        await profileSync?.flush()
         guard let fetched = try? await sync.pull() else { return .failed }
+        let profilesChanged = profileSync?.pull() ?? false
         fetched.forEach(health.submit)
         readings.append(contentsOf: fetched.filter { !readings.contains($0) })
         readings.sort { $0.measuredAt > $1.measuredAt }
-        return fetched.isEmpty ? .noData : .newData
+        return fetched.isEmpty && !profilesChanged ? .noData : .newData
     }
 }

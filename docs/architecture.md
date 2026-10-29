@@ -7,7 +7,9 @@ CoreThermometerClient (CoreBluetooth) ──events──▶ ReadingsModel ──
         └── ReadingAttributor, TemperatureMeasurement, QueueRead, Profile, ProfileDirectory (pure)
 
 ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local outbox)
-                                        └──▶ HouseholdSync (CloudKit)
+        │                               └──▶ HouseholdSync (CloudKit)
+        └──▶ ProfileSyncCoordinator ──▶ ProfileBook ──▶ ProfileDirectory ──▶ ProfileStore (local)
+                                   └──▶ ProfileSync (CloudKit, same zone)
 ```
 
 ## Core
@@ -32,13 +34,23 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   connection it discovers services `1809` and `1805`, reads the clock, starts
   the 2A75 poll loop, and subscribes to 2A1C. It is read-only.
 - `Profile` is a thermometer slot's record: slot, display name, optional owner
-  and ignored flag. Slot 0 is the guest slot. `isTracked` is false for the guest
+  and ignored flag, plus sync metadata: `modifiedAt` and `isPendingUpload`. Slot 0 is the guest slot. `isTracked` is false for the guest
   slot and ignored profiles: their readings are shown on the phone that read
   them but must never be uploaded or written to Health.
 - `ProfileDirectory` holds profiles by slot, resolves display names (default
   `Guest` or `Profile N`; a blank rename restores it) and persists every change
-  through a `ProfileStore`. `UserDefaultsProfileStore` is the local store; a
-  CloudKit-backed store can implement the protocol.
+  through a `ProfileStore` (`UserDefaultsProfileStore` is the local store). A name or
+  ignored-flag edit sets `modifiedAt` to now and marks the profile pending upload;
+  an unchanged value is not an edit. `apply(_:)` merges a `ProfileChange` from the
+  household: the version with the newer `modifiedAt` wins, a household `reset`
+  (deleted record) restores the defaults unless an edit is pending, and the local
+  `owner` is untouched. `finishUpload(of:result:)` clears the pending flag unless
+  the profile was edited meanwhile, and merges the household's version afterwards.
+  A profile customised before syncing existed (no `modifiedAt`) is pending, so it
+  uploads once and loses to any existing household record.
+- `ProfileSync` is the household's profile records: `uploadProfile(_:)` returns the
+  household's version after the save, and `takeProfileChanges()` drains the profile
+  changes seen by household fetches. `CloudKitHouseholdSync` implements it.
 
 - `SyncReading` is an attributed reading with a deterministic record name
   (`reading-<profile>-<whole-second timestamp>-<tenths of a degree>`), so every
@@ -55,6 +67,15 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   database's zone when this phone is a member, else a zone it owns in the
   private database, created on demand. A `serverRecordChanged` save counts as
   success. The change token is persisted; an expired token restarts the fetch.
+- `Profile` records (`slot`, `name`, `ignored` 0 or 1) live in the same `Household`
+  zone and database as readings, one per slot with the record name `profile-<slot>`,
+  so a rename overwrites. `uploadProfile` saves with `ifServerRecordUnchanged`; on
+  `serverRecordChanged` it compares the server record's `modificationDate` with the
+  profile's `modifiedAt` and either returns the server's version or saves the
+  profile over the server record. `fetchChanges` collects `Profile` modifications
+  and deletions (as `reset`) from the same zone change fetch, readings and profiles
+  sharing one change token, and holds them for `takeProfileChanges()`; it discards
+  them when the token expires.
 - `ReadingSyncCoordinator` persists each attributed reading of a tracked profile on receipt (guest and
   ignored profiles' readings stay off the store and CloudKit), uploads
   the outbox oldest first (stopping at the first failure), and merges fetched
@@ -124,8 +145,16 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   token, feeds new readings to the model and `HealthSync`, and returns a
   `SyncOutcome` (`newData`, `noData`, `failed`) that becomes the
   `UIBackgroundFetchResult`.
-- `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI.
-  `ProfilesView` lists and renames profiles for every thermometer slot (0, 1, 2), stored profiles and observed slots.
+- `ProfileBook` (`@Observable`) wraps `ProfileDirectory` for the UI and calls `onChange`
+  after each local edit. `ProfilesView` lists and renames profiles for every thermometer slot
+  (0, 1, 2), stored profiles and observed slots, and shows names renamed on another phone.
+- `ProfileSyncCoordinator` uploads pending profiles (on each edit and in every
+  `syncHousehold()`), stopping at the first failure, and merges household changes
+  into the `ProfileBook` after the readings pull. A failed upload (offline, or
+  Production's schema lacking `Profile`) is written to the debug log, never shown as
+  an alert, and retried on the next sync; names keep working locally meanwhile.
+  `ReadingsModel.syncHousehold()` runs it, so push-triggered fetches carry profile
+  changes too, and reports `newData` when only profiles changed.
 - `ReadingsView`'s "Invite household" toolbar button calls `invite()` (a
   spinner replaces it while preparing) and presents `CloudSharingView`, a
   `UICloudSharingController` wrapper offering
@@ -134,7 +163,7 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   connection options' `cloudKitShareMetadata`) pass the metadata through
   `ShareAcceptance` to `accept(_:)`; metadata arriving before the handler is set
   is queued.
-- `MyProfilePicker` sets `myProfile`, labelling each slot with its profile name, and shows `accessProblem` beneath it.
+- `MyProfilePicker` sets `myProfile` (local, never synced), labelling each slot with its profile name, and shows `accessProblem` beneath it.
 - `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete), the
   connection state, and the debug log of raw records and indications.
 - `Info.plist` declares `NSBluetoothAlwaysUsageDescription`, the
@@ -150,7 +179,8 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
 
 `CloudKit/schema.ckdb` mirrors the Development environment of the
 `iCloud.dev.willsawyerrrr.kintemp` container. It defines the `Reading` record
-type (`profile` INT64, `celsius` DOUBLE, `measuredAt` TIMESTAMP) and the system
+type (`profile` INT64, `celsius` DOUBLE, `measuredAt` TIMESTAMP), the `Profile` record
+type (`slot` INT64, `name` STRING, `ignored` INT64) and the system
 types `Users` and `cloudkit.share`. The `Household` zone and its share are
 created at runtime.
 
@@ -172,7 +202,7 @@ script exports the Development schema to `build/development-schema.ckdb` via
 needs an iCloud account (Settings, Apple Account). Run the script again after a
 schema change that adds system types, then deploy.
 
-`Reading` grants no roles. The app reads and writes only the private and shared
+`Reading` and `Profile` grant no roles. The app reads and writes only the private and shared
 databases, where access comes from zone ownership and the `CKShare`; record-type
 grants govern only the public database, which the app never uses. `Users` and
 `cloudkit.share` are system types and keep their system-assigned grants, which
@@ -191,4 +221,5 @@ op run --environment b5zkkwxuutlttwbrv5xhgojye4 -- sh -c 'xcrun cktool import-sc
 
 `cktool` cannot deploy to Production, and only Development to Production is
 possible. After a schema change, click Deploy Schema Changes in the CloudKit
-Console.
+Console. Until `Profile` is deployed, saving profiles fails in Production and
+the app retries them quietly.
