@@ -13,6 +13,8 @@ enum ConnectionState: Equatable {
 enum ThermometerEvent {
     case state(ConnectionState)
     case reading(ThermometerReading)
+    /// The mask read from the thermometer, and the slot edits (`true` enables) still waiting to be written.
+    case enabledSlots(EnabledSlotMask, pending: [Int: Bool])
     case log(String)
 }
 
@@ -21,4 +23,7 @@ protocol ThermometerClient: AnyObject {
     var events: AsyncStream<ThermometerEvent> { get }
     /// Begins connecting; reconnects after every disconnect.
     func start()
+    /// Queues enabling or disabling `slot` in the thermometer's enabled-slot mask. The write waits for a
+    /// live connection and is retried on each one until the mask read back matches.
+    func setSlot(_ slot: Int, enabled: Bool)
 }

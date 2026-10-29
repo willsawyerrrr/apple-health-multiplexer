@@ -21,8 +21,11 @@ household sharing lives in `Core/` behind `HouseholdSync`.
 
 ## Rules
 
-- Never write to any thermometer characteristic: popping records via the
-  queue-pop characteristic also deletes the readings.
+- The only thermometer write is the enabled-slot mask (`55 4E 00` + 14 bytes +
+  `FF FF`) to the profile command characteristic `2A74`. Never write the select
+  command (`55 00 PP FF FF`), the queue-pop characteristic or anything else:
+  popping records also deletes the readings, and choosing who a reading is for
+  stays on the thermometer.
 - A change to the protocol or routine updates `docs/protocol.md` and
   `docs/architecture.md` in the same PR.
 - Bundle ID is `dev.willsawyerrrr.kintemp`.

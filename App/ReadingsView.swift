@@ -69,7 +69,7 @@ struct ReadingsView: View {
                     Text("This deletes the reading for everyone in your household and from Apple Health. It can't be undone.")
                 })
             .sheet(isPresented: $showsProfiles) {
-                ProfilesView(book: profiles, observedSlots: model.readings.compactMap(\.profile))
+                ProfilesView(book: profiles, model: model)
             }
         }
     }

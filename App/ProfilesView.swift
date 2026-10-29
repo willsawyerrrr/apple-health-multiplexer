@@ -1,19 +1,79 @@
 import SwiftUI
 
-/// Lists the household's profiles for renaming.
+/// Lists the profiles the thermometer cycles through for renaming, adding and removing.
 struct ProfilesView: View {
     let book: ProfileBook
-    let observedSlots: [Int]
+    let model: ReadingsModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showsAdd = false
+    @State private var newName = ""
+    @State private var slotToRemove: Int?
+
+    private var slots: [Int] {
+        model.visibleSlots ?? book.slots(observed: model.readings.compactMap(\.profile))
+    }
+
+    private var newSlot: Int? { model.slotForNewPerson(reserved: book.storedSlots) }
 
     var body: some View {
         NavigationStack {
-            List(book.slots(observed: observedSlots), id: \.self) { slot in
-                ProfileRow(book: book, slot: slot)
+            List {
+                Section {
+                    ForEach(slots, id: \.self) { slot in
+                        ProfileRow(book: book, slot: slot)
+                            .deleteDisabled(slot == Profile.guestSlot || model.visibleSlots == nil)
+                    }
+                    .onDelete { offsets in slotToRemove = offsets.map { slots[$0] }.first }
+                } footer: {
+                    if model.visibleSlots == nil {
+                        Text("Connect to the thermometer to add or remove people.")
+                    } else if !model.pendingSlotEdits.isEmpty {
+                        Text("Changes reach the thermometer the next time it connects.")
+                    } else {
+                        Text("Choose who a reading is for on the thermometer.")
+                    }
+                }
             }
             .navigationTitle("Profiles")
-            .toolbar { Button("Done") { dismiss() } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Add Person", systemImage: "plus") {
+                        newName = ""
+                        showsAdd = true
+                    }
+                    .disabled(newSlot == nil)
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .alert("Add Person", isPresented: $showsAdd) {
+                TextField("Name", text: $newName)
+                Button("Add") { add() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                if let newSlot { Text("Adds slot \(newSlot) to the thermometer's profiles.") }
+            }
+            .confirmationDialog(
+                "Remove this person?", isPresented: removalPresented, titleVisibility: .visible,
+                presenting: slotToRemove,
+                actions: { slot in
+                    Button("Remove from Thermometer", role: .destructive) { model.removeSlot(slot) }
+                },
+                message: { slot in
+                    Text(
+                        "\(book.displayName(slot: slot)) disappears from the thermometer's profiles. Their readings, name and Apple Health data are kept."
+                    )
+                })
         }
+    }
+
+    private func add() {
+        guard let slot = newSlot else { return }
+        book.rename(slot: slot, to: newName)
+        model.addSlot(slot)
+    }
+
+    private var removalPresented: Binding<Bool> {
+        Binding(get: { slotToRemove != nil }, set: { if !$0 { slotToRemove = nil } })
     }
 }
 

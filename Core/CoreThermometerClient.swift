@@ -3,12 +3,14 @@ import Foundation
 
 /// CoreBluetooth implementation of `ThermometerClient`. Keeps a pending
 /// connect with state restoration and runs the read-only sync routine on every
-/// connection. Never writes to the thermometer.
+/// connection. Its only write is the enabled-slot mask to the profile command characteristic; it never
+/// sends the select command or pops the queue.
 final class CoreThermometerClient: NSObject, ThermometerClient {
     let events: AsyncStream<ThermometerEvent>
 
     private static let restoreIdentifier = "dev.willsawyerrrr.kintemp.central"
     private static let peripheralKey = "thermometerPeripheralID"
+    private static let pendingSlotsKey = "pendingSlotEdits"
 
     private let continuation: AsyncStream<ThermometerEvent>.Continuation
     private let now: () -> Date
@@ -20,11 +22,24 @@ final class CoreThermometerClient: NSObject, ThermometerClient {
     private var attributor = ReadingAttributor()
     private var polling = false
     private var liveQueue: [TemperatureMeasurement] = []
+    /// The mask just written and the edits it carries, until the read-back resolves them.
+    private var inFlight: (mask: EnabledSlotMask, edits: [Int: Bool])?
 
     private let temperatureUUID = CBUUID(string: ThermoCare.temperatureMeasurement)
     private let queueUUID = CBUUID(string: ThermoCare.queueHead)
     private let profileUUID = CBUUID(string: ThermoCare.currentProfile)
     private let clockUUID = CBUUID(string: ThermoCare.clock)
+    private let commandUUID = CBUUID(string: ThermoCare.profileCommand)
+    private let enabledSlotsUUID = CBUUID(string: ThermoCare.enabledSlots)
+
+    /// Slot edits awaiting a successful write; a later edit of a slot replaces an earlier one.
+    private var pendingEdits: [Int: Bool] {
+        get {
+            let stored = defaults.dictionary(forKey: Self.pendingSlotsKey) as? [String: Bool] ?? [:]
+            return Dictionary(uniqueKeysWithValues: stored.compactMap { key, value in Int(key).map { ($0, value) } })
+        }
+        set { defaults.set(Dictionary(uniqueKeysWithValues: newValue.map { (String($0.key), $0.value) }), forKey: Self.pendingSlotsKey) }
+    }
 
     init(now: @escaping () -> Date = Date.init, defaults: UserDefaults = .standard) {
         var continuation: AsyncStream<ThermometerEvent>.Continuation!
@@ -40,6 +55,45 @@ final class CoreThermometerClient: NSObject, ThermometerClient {
         central = CBCentralManager(
             delegate: self, queue: .main,
             options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier])
+    }
+
+    func setSlot(_ slot: Int, enabled: Bool) {
+        guard EnabledSlotMask.slotRange.contains(slot), enabled || slot != Profile.guestSlot else { return }
+        pendingEdits[slot] = enabled
+        log("queued slot \(slot) \(enabled ? "on" : "off")")
+        readEnabledSlots()
+    }
+
+    private func readEnabledSlots() {
+        guard inFlight == nil, let peripheral, peripheral.state == .connected,
+            let mask = characteristics[enabledSlotsUUID]
+        else { return }
+        peripheral.readValue(for: mask)
+    }
+
+    /// Writes `read` with the pending edits applied, if there are any, and reads the mask back to verify.
+    private func writeEdits(onto read: EnabledSlotMask, _ peripheral: CBPeripheral) {
+        let edits = pendingEdits
+        guard !edits.isEmpty, inFlight == nil, let command = characteristics[commandUUID] else { return }
+        let target = read.applying(edits)
+        guard target != read else {
+            pendingEdits = [:]
+            return
+        }
+        guard target.isWritable else { return log("mask not writable \(target.hex)") }
+        inFlight = (target, edits)
+        log("write mask \(target.hex)")
+        peripheral.writeValue(target.payload, for: command, type: .withResponse)
+    }
+
+    /// Clears the edits `inFlight` carried if the thermometer now holds its mask.
+    private func verify(_ read: EnabledSlotMask) {
+        guard let (mask, edits) = inFlight else { return }
+        inFlight = nil
+        guard read == mask else { return log("mask mismatch \(read.hex)") }
+        pendingEdits = pendingEdits.filter { edits[$0.key] != $0.value }
+        log("mask verified")
+        if !pendingEdits.isEmpty { readEnabledSlots() }
     }
 
     private func log(_ message: String) { continuation.yield(.log(message)) }
@@ -83,6 +137,7 @@ final class CoreThermometerClient: NSObject, ThermometerClient {
         characteristics = [:]
         liveQueue = []
         polling = false
+        inFlight = nil
         peripheral.discoverServices([
             CBUUID(string: ThermoCare.healthThermometerService), CBUUID(string: ThermoCare.currentTimeService),
         ])
@@ -182,6 +237,17 @@ extension CoreThermometerClient: CBPeripheralDelegate {
     }
 
     func peripheral(
+        _ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?
+    ) {
+        guard characteristic.uuid == commandUUID else { return }
+        if let error {
+            inFlight = nil
+            return log("mask write failed \(error.localizedDescription)")
+        }
+        if let mask = characteristics[enabledSlotsUUID] { peripheral.readValue(for: mask) }
+    }
+
+    func peripheral(
         _ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?
     ) {
         if let error {
@@ -198,6 +264,7 @@ extension CoreThermometerClient: CBPeripheralDelegate {
             attributor.beginSession(clockOffset: offset)
             polling = true
             pollQueue(peripheral)
+            readEnabledSlots()
             if let temperature = characteristics[temperatureUUID] {
                 peripheral.setNotifyValue(true, for: temperature)
             }
@@ -220,6 +287,13 @@ extension CoreThermometerClient: CBPeripheralDelegate {
                 polling = false
                 log("queue empty")
             }
+        case enabledSlotsUUID:
+            guard let mask = EnabledSlotMask(data) else {
+                inFlight = nil
+                return log("bad mask \(data.hex)")
+            }
+            if inFlight != nil { verify(mask) } else { writeEdits(onto: mask, peripheral) }
+            continuation.yield(.enabledSlots(mask, pending: pendingEdits))
         case temperatureUUID:
             guard let measurement = TemperatureMeasurement(data) else { return log("bad indication \(data.hex)") }
             log("indication \(String(format: "%.1f", measurement.celsius)) ts=\(measurement.timestamp)")

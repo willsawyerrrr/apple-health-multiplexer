@@ -71,8 +71,8 @@ pop characteristic would also delete the 2A1C readings.
 ## Profile select and enabled-slot mask
 
 Observed in PacketLogger captures of the first-party app and verified by
-writing to the thermometer from a standalone test script. Kintemp sends none of
-these writes. Profile names, genders, birth dates and the cap of 10 profiles
+writing to the thermometer from a standalone test script. Kintemp sends only
+the mask write, never the select. Profile names, genders, birth dates and the cap of 10 profiles
 live in the first-party app, not on the thermometer, whose display never shows
 a profile (name or number, whichever is selected): adding a profile writes
 nothing to it until it is selected.

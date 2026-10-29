@@ -281,6 +281,7 @@ struct ProfileMergeTests {
     private final class StubClient: ThermometerClient {
         let events = AsyncStream<ThermometerEvent> { _ in }
         func start() {}
+        func setSlot(_ slot: Int, enabled: Bool) {}
     }
 
     @Test func syncReportsNewDataWhenOnlyProfilesChanged() async {

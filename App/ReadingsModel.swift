@@ -5,6 +5,10 @@ import Observation
 final class ReadingsModel {
     private(set) var state: ConnectionState = .waiting
     private(set) var readings: [ThermometerReading] = []
+    /// The mask last read from the thermometer, once it has connected.
+    private(set) var enabledSlots: EnabledSlotMask?
+    /// Slot edits not yet confirmed on the thermometer (`true` enables).
+    private(set) var pendingSlotEdits: [Int: Bool] = [:]
     private(set) var logLines: [String] = []
 
     private static let maxLogLines = 300
@@ -38,6 +42,29 @@ final class ReadingsModel {
         Task { await sync.flush() }
     }
 
+    /// The slots to list: the thermometer's mask with pending edits applied, or `nil` before it has been read.
+    var visibleSlots: [Int]? {
+        enabledSlots?.applying(pendingSlotEdits).slots
+    }
+
+    /// The lowest slot for a new person: not enabled, and holding no stored profile or reading. `nil` before
+    /// the mask is read or when all 100 slots are taken.
+    func slotForNewPerson(reserved: Set<Int>) -> Int? {
+        enabledSlots?.applying(pendingSlotEdits)
+            .lowestFreeSlot(reserved: reserved.union(readings.compactMap(\.profile)))
+    }
+
+    /// Queues enabling `slot` on the thermometer. The thermometer's selection is never touched.
+    func addSlot(_ slot: Int) { setSlot(slot, enabled: true) }
+
+    /// Queues disabling `slot` on the thermometer. Its readings, name and Health data are kept.
+    func removeSlot(_ slot: Int) { setSlot(slot, enabled: false) }
+
+    private func setSlot(_ slot: Int, enabled: Bool) {
+        pendingSlotEdits[slot] = enabled
+        client.setSlot(slot, enabled: enabled)
+    }
+
     func handle(_ event: ThermometerEvent) {
         switch event {
         case .state(let state):
@@ -51,6 +78,9 @@ final class ReadingsModel {
                 sync.record(reading)
                 Task { await sync.flush() }
             }
+        case .enabledSlots(let mask, let pending):
+            enabledSlots = mask
+            pendingSlotEdits = pending
         case .log(let line):
             log(line)
         }

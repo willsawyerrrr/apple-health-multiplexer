@@ -8,6 +8,8 @@ struct ReadingsModelTests {
     private final class StubClient: ThermometerClient {
         let events = AsyncStream<ThermometerEvent> { _ in }
         func start() {}
+        var edits: [Int: Bool] = [:]
+        func setSlot(_ slot: Int, enabled: Bool) { edits[slot] = enabled }
     }
 
     private struct StubWriter: HealthWriter {
@@ -25,10 +27,12 @@ struct ReadingsModelTests {
         func fetchChanges() async throws -> HouseholdChanges { HouseholdChanges(readings: changes, deletedRecordNames: deletions) }
     }
 
-    private func makeModel(myProfile: Int? = nil, sync: ReadingSyncCoordinator? = nil) -> ReadingsModel {
+    private func makeModel(
+        myProfile: Int? = nil, sync: ReadingSyncCoordinator? = nil, client: ThermometerClient = StubClient()
+    ) -> ReadingsModel {
         let health = HealthSync(writer: StubWriter(), defaults: UserDefaults(suiteName: UUID().uuidString)!)
         health.myProfile = myProfile
-        return ReadingsModel(client: StubClient(), sync: sync, health: health)
+        return ReadingsModel(client: client, sync: sync, health: health)
     }
 
     private func makeCoordinator(
@@ -39,6 +43,34 @@ struct ReadingsModelTests {
 
     private func reading(_ celsius: Double, at seconds: TimeInterval) -> ThermometerReading {
         ThermometerReading(profile: 1, celsius: celsius, measuredAt: Date(timeIntervalSince1970: seconds))
+    }
+
+    private let firstParty = EnabledSlotMask(Data(hex: "E0FF 0000 0000 0000 0000 0000 0000"))!
+
+    @Test func slotsAreUnknownBeforeTheMaskIsRead() {
+        let model = makeModel()
+        #expect(model.visibleSlots == nil)
+        #expect(model.slotForNewPerson(reserved: []) == nil)
+    }
+
+    @Test func addedAndRemovedSlotsShowBeforeTheyReachTheThermometer() {
+        let client = StubClient()
+        let model = makeModel(client: client)
+        model.handle(.enabledSlots(firstParty, pending: [:]))
+
+        model.addSlot(11)
+        model.removeSlot(3)
+
+        #expect(client.edits == [11: true, 3: false])
+        #expect(model.visibleSlots == [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11])
+    }
+
+    @Test func newPersonTakesTheLowestSlotNotEnabledReservedOrRead() {
+        let model = makeModel()
+        model.handle(.enabledSlots(firstParty, pending: [:]))
+        model.handle(.reading(ThermometerReading(profile: 11, celsius: 36.5, measuredAt: Date(timeIntervalSince1970: 1))))
+
+        #expect(model.slotForNewPerson(reserved: [12]) == 13)
     }
 
     @Test func deleteRemovesOnlyThatReading() {

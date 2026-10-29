@@ -14,6 +14,7 @@ final class ProfileBook {
     func profile(slot: Int) -> Profile { directory.profile(slot: slot) }
     func displayName(slot: Int?) -> String { directory.displayName(slot: slot) }
     func slots(observed: some Sequence<Int>) -> [Int] { directory.slots(observed: observed) }
+    var storedSlots: Set<Int> { directory.storedSlots }
     var pendingUploads: [Profile] { directory.pendingUploads }
 
     func rename(slot: Int, to name: String) {
