@@ -87,7 +87,8 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at ts: TimeInter
     }
 
     @Test func backfillNeverQueuesGuestProfile() {
-        let (sync, _) = makeSync(FakeWriter(), profile: nil)
+        let sync = HealthSync(
+            writer: FakeWriter(), defaults: UserDefaults(suiteName: UUID().uuidString)!, isTracked: { $0 != 0 })
         sync.storedReadings = { [reading(0)] }
         sync.myProfile = 0
         #expect(sync.pending.isEmpty)
