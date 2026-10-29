@@ -81,10 +81,10 @@ Both writes are ATT Write Requests (with response) to the profile command
 characteristic `2A74`, handle `0x23`. The first-party app sends them in this
 order when a profile is selected, each twice a few hundred ms apart:
 
-| Write                                 | Meaning                       |
-| ------------------------------------- | ----------------------------- |
-| `55 4E 00 MM MM` + 12 × `00`, `FF FF` | Enabled-slot mask (19 bytes)  |
-| `55 00 PP FF FF`                      | Select profile `PP` (5 bytes) |
+| Write                               | Meaning                       |
+| ----------------------------------- | ----------------------------- |
+| `55 4E 00` + 14-byte mask + `FF FF` | Enabled-slot mask (19 bytes)  |
+| `55 00 PP FF FF`                    | Select profile `PP` (5 bytes) |
 
 ### Select
 
@@ -103,22 +103,38 @@ order when a profile is selected, each twice a few hundred ms apart:
 
 ### Enabled-slot mask
 
-`MM MM` is a big-endian `UInt16`. `2A79` reads back the mask in its first two
-bytes (`E0FF 0000…`, 14 bytes) and reflects a write immediately (writing
-`F0FF` read back as `F0FF`). The mask has no visible effect on selecting or
-stamping readings; it appears to hold the first-party app's list of enabled
-profiles. Slot `n` is bit `(7 - n) mod 16`, as seen in the first-party app:
-slots 0-7 take bits 7 down to 0, slots 8-15 take bits 15 down to 8. Slot 0 (the
-guest slot) is always set.
+The mask is the list of profiles the thermometer steps through when cycling
+with its button, and the 14-byte value after `55 4E 00` in the write. `2A79`
+reads it back (14 bytes) and reflects a write immediately. Over Bluetooth it has
+no effect on selecting or stamping readings.
 
-| Enabled slots | Mask     |
-| ------------- | -------- |
-| 0-2           | `0x00E0` |
-| 0-3           | `0x00F0` |
-| 0-10          | `0xE0FF` |
+It is seven 16-bit big-endian words, word `w` covering slots `16w` to
+`16w + 15`. Within a word, slot `j` (0-15) is bit `(7 - j) mod 16`: slots 0-7
+take bits 7 down to 0 and slots 8-15 take bits 15 down to 8. Verified by
+cycling on the thermometer:
+
+| Mask (14 bytes)                      | Cycles through            |
+| ------------------------------------ | ------------------------- |
+| `E0FF 0000 0000 0000 0000 0000 0000` | 0-10                      |
+| `E0FF FF00 …`                        | 0-10, 24-31               |
+| `E0FF 00FF 0000 0000 0000 0000 FF00` | 0-10, 16-23               |
+| `E0FF 0000 00FF FF00 0000 00FF 0000` | 0-10, 32-39, 56-63, 80-87 |
+| `E0FF 0000 0000 0000 0000 FF00 00FF` | 0-10, 88-99               |
+
+Only slots 0-99 exist: the last bits of word 6 (slots 100-111) and the whole
+top byte of it have no effect. The cap is 100 profiles, ten times the
+first-party app's.
+
+Other behaviour:
+
+- A mask whose first two bytes are `FFFF` (including all `FF`) is silently
+  ignored; the write succeeds and `2A79` is unchanged. Every other value
+  tested was stored, including `FEFF`, `FFFE` and a full `FFFF` word elsewhere.
+- A write that is not 19 bytes is silently ignored.
+- Slot 0 (the guest slot) is set in every mask the first-party app wrote.
 
 Adding a profile sets its bit; removing one clears it (`0x00F0` to `0x00E0`
-when slot 3 was removed).
+when slot 3 was removed, as `00F0` and `00E0` in the first word).
 
 ### Other writes
 
