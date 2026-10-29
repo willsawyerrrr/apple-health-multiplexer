@@ -73,8 +73,9 @@ pop characteristic would also delete the 2A1C readings.
 Observed in PacketLogger captures of the first-party app and verified by
 writing to the thermometer from a standalone test script. Kintemp sends none of
 these writes. Profile names, genders, birth dates and the cap of 10 profiles
-live in the first-party app, not on the thermometer, which shows only profile
-numbers: adding a profile writes nothing to it until it is selected.
+live in the first-party app, not on the thermometer, whose display never shows
+a profile (name or number, whichever is selected): adding a profile writes
+nothing to it until it is selected.
 
 Both writes are ATT Write Requests (with response) to the profile command
 characteristic `2A74`, handle `0x23`. The first-party app sends them in this
