@@ -34,6 +34,74 @@ private func reading(_ profile: Int?, _ celsius: Double = 36.4, at ts: TimeInter
 }
 
 @MainActor @Suite struct HealthSyncTests {
+    @Test func backfillsStoredReadingsWhenProfileIsSet() {
+        let (sync, _) = makeSync(FakeWriter(), profile: nil)
+        sync.storedReadings = { [reading(1, at: 1_793_119_737), reading(2, at: 1_793_119_800), reading(nil)] }
+        sync.myProfile = 1
+        #expect(sync.pending.map(\.name) == ["reading-1-1793119737-364"])
+    }
+
+    @Test func backfillsOnChangeToAnotherProfile() {
+        let (sync, _) = makeSync(FakeWriter(), profile: nil)
+        sync.storedReadings = { [reading(1, at: 1_793_119_737), reading(2, at: 1_793_119_800)] }
+        sync.myProfile = 1
+        sync.myProfile = 2
+        #expect(sync.pending.map(\.name) == ["reading-1-1793119737-364", "reading-2-1793119800-364"])
+    }
+
+    @Test func backfillDoesNotRequeueQueuedReadings() {
+        let (sync, _) = makeSync(FakeWriter(), profile: nil)
+        sync.storedReadings = { [reading(1)] }
+        sync.myProfile = 1
+        sync.backfill()
+        #expect(sync.pending.count == 1)
+    }
+
+    @Test func writtenReadingIsNotRequeuedAfterRelaunch() async {
+        let writer = FakeWriter()
+        writer.failing = false
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let first = HealthSync(writer: writer, defaults: defaults)
+        first.myProfile = 1
+        first.submit(reading(1))
+        await first.flush()
+        #expect(writer.written.count == 1)
+
+        let relaunched = HealthSync(writer: writer, defaults: defaults)
+        relaunched.storedReadings = { [reading(1)] }
+        relaunched.backfill()
+        relaunched.submit(reading(1))
+        #expect(relaunched.pending.isEmpty)
+    }
+
+    @Test func discardForgetsWrittenReading() async {
+        let writer = FakeWriter()
+        writer.failing = false
+        let (sync, _) = makeSync(writer)
+        sync.submit(reading(1))
+        await sync.flush()
+        sync.discard(reading(1))
+        #expect(sync.written.isEmpty)
+        sync.submit(reading(1))
+        #expect(sync.pending.count == 1)
+    }
+
+    @Test func backfillNeverQueuesGuestProfile() {
+        let sync = HealthSync(
+            writer: FakeWriter(), defaults: UserDefaults(suiteName: UUID().uuidString)!, isTracked: { $0 != 0 })
+        sync.storedReadings = { [reading(0)] }
+        sync.myProfile = 0
+        #expect(sync.pending.isEmpty)
+    }
+
+    @Test func backfillSkipsUntrackedProfile() {
+        let sync = HealthSync(
+            writer: FakeWriter(), defaults: UserDefaults(suiteName: UUID().uuidString)!, isTracked: { $0 != 1 })
+        sync.storedReadings = { [reading(1)] }
+        sync.myProfile = 1
+        #expect(sync.pending.isEmpty)
+    }
+
     @Test func queuesOnlyMyProfile() {
         let (sync, _) = makeSync(FakeWriter(), profile: 1)
         sync.submit(reading(0))
