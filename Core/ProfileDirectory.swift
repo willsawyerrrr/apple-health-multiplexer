@@ -44,6 +44,9 @@ struct ProfileDirectory {
         Set(bySlot.keys).union(observed).union(Profile.thermometerSlots).sorted()
     }
 
+    /// Slots with a stored profile.
+    var storedSlots: Set<Int> { Set(bySlot.keys) }
+
     /// Profiles with a local change awaiting upload, ascending by slot.
     var pendingUploads: [Profile] {
         bySlot.values.filter(\.isPendingUpload).sorted { $0.slot < $1.slot }

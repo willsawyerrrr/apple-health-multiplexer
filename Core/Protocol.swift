@@ -16,6 +16,10 @@ enum ThermoCare {
     static let queueHead = custom("2A75")
     /// Current profile, `UInt16` big-endian (read).
     static let currentProfile = custom("2A78")
+    /// Profile command (write): the enabled-slot mask.
+    static let profileCommand = custom("2A74")
+    /// Enabled-slot mask, 14 bytes (read).
+    static let enabledSlots = custom("2A79")
     /// Thermometer clock, Unix seconds big-endian (read).
     static let clock = custom("2A2C")
 }

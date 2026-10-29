@@ -32,7 +32,20 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   identifier, remembers the peripheral identifier, scans for the thermometer
   only until it has found it, and otherwise keeps a pending `connect`. On every
   connection it discovers services `1809` and `1805`, reads the clock, starts
-  the 2A75 poll loop, and subscribes to 2A1C. It is read-only.
+  the 2A75 poll loop, and subscribes to 2A1C. Its only write is the enabled-slot
+  mask (see `EnabledSlotMask`); it never sends the select command or pops the queue.
+  `setSlot(_:enabled:)` records a slot edit in `UserDefaults` (a later edit of a
+  slot replaces an earlier one) and, on a live connection, reads 2A79 first. With
+  edits pending, the read mask is written with the edits applied (`55 4E 00` + mask
+  - `FF FF`, 19 bytes, with response to 2A74) and 2A79 is read back: only a read
+    equal to the written mask clears the edits. A write failure, a mismatch, or a
+    mask whose first two bytes are `FFFF` (which the thermometer ignores) leaves the
+    edits pending for the next connection, which reads 2A79 right after the clock.
+    The client emits `.enabledSlots(mask, pending:)` after each 2A79 read.
+- `EnabledSlotMask` is the 14-byte enabled-slot mask: `contains`, `slots`,
+  `setting(_:enabled:)` (changes one bit, keeps slot 0 enabled and ignores slots
+  outside 0-99), `applying(_:)`, `lowestFreeSlot(reserved:)`, `isWritable` (not
+  `FFFF` first) and the 19-byte `payload`.
 - `Profile` is a thermometer slot's record: slot, display name, optional owner
   and ignored flag, plus sync metadata: `modifiedAt` and `isPendingUpload`. Slot 0 is the guest slot. `isTracked` is false for the guest
   slot and ignored profiles: their readings are shown on the phone that read
@@ -190,6 +203,16 @@ ReadingsModel ──▶ ReadingSyncCoordinator ──▶ ReadingStore (local out
   connection options' `cloudKitShareMetadata`) pass the metadata through
   `ShareAcceptance` to `accept(_:)`; metadata arriving before the handler is set
   is queued.
+- `ReadingsModel` keeps the last mask read and the pending slot edits.
+  `ProfilesView` lists the slots of that mask with pending edits applied (before the
+  first read it lists the stored and observed slots and cannot add or remove).
+  "Add Person" names the lowest slot that is neither enabled nor reserved (a stored
+  profile or a reading exists for it, so a removed person's slot is never reused),
+  renames that profile and queues the enable. Swipe-to-remove (not for the guest)
+  queues the disable after a confirmation that says the person's readings, name and
+  Apple Health data are kept: removal only edits the thermometer's mask, so the
+  household's `Profile` records, stored readings and Health samples are untouched.
+  The app never selects the active profile.
 - `MyProfilePicker` sets `myProfile` (local, never synced), labelling each slot with its profile name, and shows `accessProblem` beneath it.
 - `ReadingsView` lists readings (profile name or ambiguous, °C, time; swipe to delete,
   confirmed by a destructive dialog saying it deletes the reading for everyone in the
