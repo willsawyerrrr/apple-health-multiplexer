@@ -68,6 +68,51 @@ with records by timestamp equality. One read per indication misses records.
 The app never writes to any characteristic: popping records through the queue
 pop characteristic would also delete the 2A1C readings.
 
+## Writes by the first-party app
+
+Observed in PacketLogger captures of the first-party app. Kintemp sends none of
+these. Profile names, genders, birth dates and the cap of 10 profiles live in
+the first-party app, not on the thermometer: adding a profile writes nothing
+to it until it is selected.
+
+All writes below are ATT Write Requests on handle `0x23` (the profile command
+characteristic `2A74`), in this order when a profile is selected:
+
+| Write                                 | Meaning                         |
+| ------------------------------------- | ------------------------------- |
+| `54 FF FF`                            | Unidentified; precedes the rest |
+| `55 4E 00 MM MM` + 12 × `00`, `FF FF` | Enabled-slot mask (19 bytes)    |
+| `55 00 0P FF FF`                      | Select profile `P` (5 bytes)    |
+
+The mask and select are each sent twice, a few hundred ms apart.
+
+### Enabled-slot mask
+
+`MM MM` is a big-endian `UInt16`; the thermometer also reports it when
+`2A79` is read (`00E0 0000…` with slots 0-2 enabled). Slot `n` is bit
+`(7 - n) mod 16`: slots 0-7 take bits 7 down to 0, slots 8-15 take bits 15
+down to 8. Slot 0 (the guest slot) is always set.
+
+| Enabled slots | Mask     |
+| ------------- | -------- |
+| 0-2           | `0x00E0` |
+| 0-3           | `0x00F0` |
+| 0-10          | `0xE0FF` |
+
+Adding a profile sets its bit; removing one clears it (`0x00F0` to `0x00E0`
+when slot 3 was removed). The thermometer shows no names, only profile numbers.
+
+### Not verified
+
+- Whether the thermometer accepts a select for slots above 3, or without the
+  mask write before it.
+- Whether a select changes the profile stamped on the next measurement, and
+  whether it persists after the thermometer drops the connection.
+- The purpose of `54 FF FF`, and of the writes to handles `0x0F` (`02 00`),
+  `0x4E` (`31 31 31 31`), `0x13` (`02 00`) and `0x27` seen on each connection.
+- Handle `0x5C` is written with the current Unix time (4 bytes, big-endian) on
+  each connection: a clock sync.
+
 ## Per-connection routine
 
 1. Read 2A2C and compute `clockOffset = hostUnixNow - thermometerClock`.
